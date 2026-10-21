@@ -1,0 +1,2828 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>שירה והלל</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script src="media/mikmak/assets.js"></script>
+
+  <style>
+    body {
+      font-family: 'Assistant', sans-serif;
+      background-color: #fafafa;
+      color: #2d3748;
+      overflow-x: hidden;
+    }
+    
+    /* אנימציית לעיסה */
+    @keyframes chewFace {
+      0%, 100% { transform: scale(1, 1); }
+      50% { transform: scale(1.08, 0.88); }
+    }
+    .eating-face {
+      animation: chewFace 0.32s infinite ease-in-out alternate;
+      transform-origin: bottom center;
+    }
+
+    /* תנועת העיגולים הנכנסים אל הפה */
+    @keyframes flyIntoMouth {
+      0% { transform: translateX(130px) scale(0.6); opacity: 0; }
+      30% { opacity: 1; transform: translateX(80px) scale(1); }
+      80% { opacity: 1; transform: translateX(20px) scale(0.85); }
+      100% { transform: translateX(-10px) scale(0.2); opacity: 0; }
+    }
+    .food-pellet {
+      animation: flyIntoMouth 0.9s infinite linear;
+    }
+    .food-pellet:nth-child(2) { animation-delay: 0.3s; }
+    .food-pellet:nth-child(3) { animation-delay: 0.6s; }
+
+    /* פעימת לב ענק לשידוך */
+    @keyframes heartBeatGiant {
+      0% { transform: scale(0.6); opacity: 0; }
+      40% { transform: scale(1.15); opacity: 1; }
+      60% { transform: scale(0.95); }
+      80% { transform: scale(1.05); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .giant-match-active {
+      animation: heartBeatGiant 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    canvas {
+      pointer-events: none !important;
+    }
+  </style>
+</head>
+<body class="selection:bg-rose-100">
+
+  <!-- 1. מסך התחברות -->
+  <div id="login-modal" class="fixed inset-0 z-50 bg-white flex items-center justify-center p-4">
+    <div class="max-w-md w-full p-8 border border-gray-100 rounded-3xl shadow-xl text-center space-y-6">
+      <div class="space-y-1">
+        <h1 class="text-3xl font-extrabold text-gray-800 tracking-tight">שירה והלל</h1>
+        <p class="text-xs text-gray-400">הכניסה למורשים בלבד ✨</p>
+      </div>
+
+      <div class="space-y-4 text-right">
+        <div>
+          <label class="block text-xs font-bold text-gray-500 mb-1">שם משתמש</label>
+          <input id="username" type="text" placeholder="שירה / הלל" class="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-rose-300 outline-none transition">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-500 mb-1">סיסמה</label>
+          <input id="password" type="password" placeholder="••••••••" class="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-rose-300 outline-none transition">
+        </div>
+        <p id="login-error" class="text-rose-500 text-xs hidden">שם משתמש או סיסמה שגויים, נסו שוב :)</p>
+        <button onclick="handleLogin()" class="w-full py-3.5 bg-gray-900 hover:bg-black text-white font-bold rounded-2xl shadow-md transition">
+          כניסה לאתר
+        </button>
+
+        <div class="pt-2 text-center">
+          <label class="text-xs text-gray-400 hover:text-gray-700 cursor-pointer underline">
+            🎬 העלאת סרטון/תמונת טעינה חדשה
+            <input type="file" accept="video/*,image/*" class="hidden" onchange="handleMediaUpload(event)">
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. מסך טעינה: סרטון או תמונה לועסים (1.5 שניות) -->
+  <div id="loading-screen" class="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center hidden select-none">
+    <div class="relative flex items-center justify-center">
+
+      <div class="absolute right-28 flex items-center pointer-events-none">
+        <div class="w-5 h-5 rounded-full bg-rose-400 shadow food-pellet absolute"></div>
+        <div class="w-5 h-5 rounded-full bg-amber-400 shadow food-pellet absolute"></div>
+        <div class="w-5 h-5 rounded-full bg-blue-400 shadow food-pellet absolute"></div>
+      </div>
+
+      <div class="relative z-10 eating-face">
+        <div class="w-40 h-40 rounded-full border-4 border-amber-300 shadow-2xl overflow-hidden bg-gray-100 flex items-center justify-center">
+          <video id="loader-video" autoplay loop muted playsinline class="w-full h-full object-cover hidden"></video>
+          <img id="loader-image" src="" alt="טעינה" class="w-full h-full object-cover hidden">
+          <div id="loader-placeholder" class="text-6xl">😋</div>
+        </div>
+        <span class="absolute -bottom-1 -right-1 text-2xl">⚡</span>
+      </div>
+
+    </div>
+
+    <p class="text-gray-700 text-sm font-bold tracking-wide mt-6 animate-pulse">הלל בולס... טוען את האתר</p>
+  </div>
+
+  <!-- 3. מסך שלט ענק לשידוך זוגות (סגירה בלחיצה בכל מקום) -->
+  <div id="fullscreen-match-overlay" onclick="closeMatchOverlay()" class="fixed inset-0 z-[999] bg-black/85 backdrop-blur-md flex flex-col items-center justify-center text-white hidden p-6 text-center select-none cursor-pointer">
+    <button onclick="event.stopPropagation(); closeMatchOverlay()" class="absolute top-6 left-6 text-gray-300 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-12 h-12 flex items-center justify-center text-2xl font-bold transition">✕</button>
+    <div id="match-popup-box" onclick="event.stopPropagation()" class="space-y-6 max-w-lg w-full bg-black/40 p-8 rounded-3xl border border-white/10 cursor-default">
+      <div class="text-8xl md:text-9xl animate-pulse">💖</div>
+      <h2 class="text-4xl md:text-6xl font-black text-rose-300 drop-shadow-lg tracking-wider">יש לנו שידוך!</h2>
+      <div class="flex items-center justify-center gap-4 text-2xl md:text-4xl font-extrabold bg-white/10 px-8 py-4 rounded-3xl backdrop-blur-lg border border-white/20">
+        <span id="match-p1" class="text-white"></span>
+        <span class="text-rose-400">❤️</span>
+        <span id="match-p2" class="text-white"></span>
+      </div>
+      <p class="text-sm md:text-base text-gray-300 max-w-sm mx-auto">בשעה טובה ומוצלחת! הלוואי שיבנו בית נאמן בישראל 🎉</p>
+      <button onclick="closeMatchOverlay()" class="mt-4 px-8 py-3.5 bg-rose-500 hover:bg-rose-600 text-white font-extrabold text-base rounded-2xl shadow-xl transition inline-block cursor-pointer">סגור ומזל טוב! ✨</button>
+      <div class="text-xs text-gray-400 mt-2">(או לחצו בכל מקום במסך לסגירה)</div>
+    </div>
+  </div>
+
+  <!-- 4. תוכן האתר המרכזי -->
+  <div id="site-content" class="hidden min-h-screen pb-16">
+
+    <!-- שער (Hero) -->
+    <header class="relative w-full h-[90vh] flex flex-col items-center justify-center overflow-hidden bg-gray-100">
+      <img id="cover-photo" src="https://images.unsplash.com/photo-1518495973542-4542c06a5843?auto=format&fit=crop&w=1600&q=80" 
+           alt="שער" class="absolute inset-0 w-full h-full object-cover opacity-90 transition duration-700">
+      <div class="absolute inset-0 bg-gradient-to-t from-white via-white/20 to-black/30"></div>
+
+      <div class="absolute top-6 left-6 z-20 flex gap-2">
+        <label class="cursor-pointer bg-white/90 hover:bg-white text-gray-700 px-4 py-2 rounded-full text-xs font-bold backdrop-blur shadow-sm transition">
+          🎬 החלפת סרטון טעינה
+          <input type="file" accept="video/*,image/*" class="hidden" onchange="handleMediaUpload(event)">
+        </label>
+        <label class="cursor-pointer bg-white/90 hover:bg-white text-gray-700 px-4 py-2 rounded-full text-xs font-bold backdrop-blur shadow-sm transition">
+          📷 החלפת שער
+          <input type="file" accept="image/*" class="hidden" onchange="changeCoverPhoto(event)">
+        </label>
+        <button onclick="logout()" class="bg-white/90 hover:bg-white text-rose-500 px-4 py-2 rounded-full text-xs font-bold backdrop-blur shadow-sm transition">
+          יציאה
+        </button>
+      </div>
+
+      <div class="relative z-10 text-center space-y-3">
+        <span id="greeting-badge" class="px-4 py-1.5 rounded-full bg-white/80 text-xs font-bold text-gray-700 backdrop-blur shadow-sm inline-block mb-1"></span>
+        <h1 class="text-5xl md:text-7xl font-extrabold text-gray-900 tracking-wider">שירה והלל</h1>
+        <p class="text-lg md:text-xl text-gray-600 font-light">המקום והזיכרונות המשותפים שלנו</p>
+      </div>
+
+      <a href="#toc-bar" class="absolute bottom-8 z-10 flex flex-col items-center text-gray-500 hover:text-black transition">
+        <span class="text-xs font-semibold mb-1">החליקו לתוכן</span>
+        <svg class="w-5 h-5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+      </a>
+    </header>
+
+    <!-- סרגל תוכן עניינים -->
+    <nav id="toc-bar" class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-100 py-3 shadow-xs">
+      <div class="max-w-4xl mx-auto px-4 flex justify-around md:justify-center gap-2 md:gap-6 text-xs md:text-sm overflow-x-auto">
+        <button onclick="switchTab('scoreboard')" id="tab-btn-scoreboard" class="tab-btn font-bold text-blue-600 border-b-2 border-blue-600 pb-1.5 transition whitespace-nowrap">🏆 מאזן ניקוד</button>
+        <button onclick="switchTab('topics')" id="tab-btn-topics" class="tab-btn font-bold text-gray-400 hover:text-gray-700 pb-1.5 transition whitespace-nowrap">💬 נושאים</button>
+        <button onclick="switchTab('match')" id="tab-btn-match" class="tab-btn font-bold text-gray-400 hover:text-gray-700 pb-1.5 transition whitespace-nowrap">💘 שידוכים</button>
+        <button onclick="switchTab('avatar')" id="tab-btn-avatar" class="tab-btn font-bold text-gray-400 hover:text-gray-700 pb-1.5 transition whitespace-nowrap">👑 המיקמק שלנו</button>
+        <button onclick="switchTab('gallery')" id="tab-btn-gallery" class="tab-btn font-bold text-gray-400 hover:text-gray-700 pb-1.5 transition whitespace-nowrap">📸 תמונות נעות</button>
+        <button onclick="switchTab('pacman')" id="tab-btn-pacman" class="tab-btn font-bold text-gray-400 hover:text-gray-700 pb-1.5 transition whitespace-nowrap">🟡 הלל Pac Man</button>
+      </div>
+    </nav>
+
+    <main class="max-w-3xl mx-auto px-4 py-10">
+
+      <!-- ================= 0. מאזן ניקוד (הלל נגד שירה + כפתור איפוס) ================= -->
+      <section id="section-scoreboard" class="space-y-8">
+        <div class="text-center space-y-1">
+          <h2 class="text-2xl font-black text-gray-800">מאזן הניקוד הרשמי 🏆</h2>
+          <p id="leader-text" class="text-xs font-bold text-gray-400">מי מוביל בקרב הזוגי?</p>
+        </div>
+
+        <div class="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm max-w-lg mx-auto">
+          <div class="flex items-center justify-between">
+            
+            <!-- צד הלל (כחול) -->
+            <div class="flex items-center gap-3">
+              <div class="flex flex-col gap-1">
+                <button onclick="changeScore('hallel', 1)" class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold flex items-center justify-center transition shadow-xs">▲</button>
+                <button onclick="changeScore('hallel', -1)" class="w-8 h-8 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-200 font-bold flex items-center justify-center transition shadow-xs">▼</button>
+              </div>
+              <div class="text-center">
+                <span class="block text-xs font-extrabold text-blue-500 mb-1">הלל</span>
+                <span id="score-hallel" class="text-5xl md:text-6xl font-black text-blue-600 tracking-tight">0</span>
+              </div>
+            </div>
+
+            <div class="text-4xl font-black text-gray-300 select-none px-4">-</div>
+
+            <!-- צד שירה (ורוד) -->
+            <div class="flex items-center gap-3">
+              <div class="text-center">
+                <span class="block text-xs font-extrabold text-rose-500 mb-1">שירה</span>
+                <span id="score-shira" class="text-5xl md:text-6xl font-black text-rose-500 tracking-tight">0</span>
+              </div>
+              <div class="flex flex-col gap-1">
+                <button onclick="changeScore('shira', 1)" class="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white font-bold flex items-center justify-center transition shadow-xs">▲</button>
+                <button onclick="changeScore('shira', -1)" class="w-8 h-8 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-200 font-bold flex items-center justify-center transition shadow-xs">▼</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- הוספת נימוק -->
+          <div class="mt-8 pt-6 border-t border-gray-100 space-y-3">
+            <span class="block text-xs font-bold text-gray-500">הוספת נקודה עם סיבה:</span>
+            <div class="flex gap-2">
+              <input id="score-reason" type="text" placeholder="למשל: הכין קפה מושלם / איחרה ב-10 דקות..." class="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-200">
+              <button onclick="addPointWithReason('hallel')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition">+1 להלל</button>
+              <button onclick="addPointWithReason('shira')" class="bg-rose-500 hover:bg-rose-600 text-white px-3 py-2 rounded-xl text-xs font-bold transition">+1 לשירה</button>
+            </div>
+          </div>
+
+          <!-- כפתור איפוס התוצאה -->
+          <div class="text-center pt-4 border-t border-gray-50 mt-4">
+            <button onclick="resetScoreboard()" class="text-xs text-gray-400 hover:text-rose-500 font-bold flex items-center justify-center gap-1 mx-auto transition">
+              <span>🔄</span> איפוס תוצאה ל-0:0
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm max-w-lg mx-auto space-y-3">
+          <h3 class="text-xs font-bold text-gray-500">יומן הנקודות האחרון:</h3>
+          <div id="score-history" class="space-y-2"></div>
+        </div>
+      </section>
+
+      <!-- ================= 1. נושאים: שיחות + תכנונים ================= -->
+      <section id="section-topics" class="hidden space-y-6">
+        <div class="text-center space-y-1">
+          <h2 class="text-2xl font-black text-gray-800">נושאים ותכנונים</h2>
+          <p class="text-xs text-gray-400">על מה צריך לדבר, ומה אנחנו הולכים לעשות ביחד</p>
+        </div>
+
+        <!-- בורר קטגוריות -->
+        <div class="flex justify-center">
+          <div class="inline-flex bg-gray-100 p-1 rounded-2xl text-sm font-bold">
+            <button id="topics-cat-talk" onclick="switchTopicsCategory('talk')" class="topics-cat px-5 py-2 rounded-xl transition">💬 נושאי שיחה <span id="talk-count" class="text-[11px] opacity-60"></span></button>
+            <button id="topics-cat-plans" onclick="switchTopicsCategory('plans')" class="topics-cat px-5 py-2 rounded-xl transition">🗓️ תכנונים ובילויים <span id="plans-count" class="text-[11px] opacity-60"></span></button>
+          </div>
+        </div>
+
+        <!-- ---------- קטגוריה 1: נושאי שיחה ---------- -->
+        <div id="topics-panel-talk" class="space-y-4">
+        <div class="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm space-y-3">
+          <div class="flex items-center gap-2">
+            <select id="topic-emoji" class="px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-lg outline-none cursor-pointer">
+              <option value="💭">💭 מחשבה</option>
+              <option value="❤️">❤️ זוגיות</option>
+              <option value="✈️">✈️ טיולים</option>
+              <option value="🍕">🍕 אוכל ומתכונים</option>
+              <option value="📖">📖 תורה וספרים</option>
+              <option value="🎬">🎬 סרטים / סדרות</option>
+              <option value="💡">💡 רעיון חדש</option>
+              <option value="😂">😂 צחוקים וקטעים</option>
+            </select>
+            <input id="new-topic-title" type="text" placeholder="על מה צריך לדבר?" onkeydown="if(event.key==='Enter') addTopic()" class="flex-1 min-w-0 px-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-rose-200 outline-none">
+            <button onclick="addTopic()" class="bg-gray-900 hover:bg-black text-white px-5 py-2 rounded-xl text-sm font-bold transition">הוסף</button>
+          </div>
+        </div>
+
+        <div id="topics-list" class="space-y-2.5"></div>
+        </div>
+
+        <!-- ---------- קטגוריה 2: תכנונים ובילויים ---------- -->
+        <div id="topics-panel-plans" class="hidden space-y-4">
+          <div class="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm space-y-2.5">
+            <div class="flex items-center gap-2">
+              <select id="plan-emoji" class="px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-lg outline-none cursor-pointer">
+                <option value="🍽️">🍽️ מסעדה</option>
+                <option value="☕">☕ בית קפה</option>
+                <option value="🥾">🥾 טיול</option>
+                <option value="🏖️">🏖️ חופשה</option>
+                <option value="🎬">🎬 סרט / הופעה</option>
+                <option value="🎡">🎡 בילוי / אטרקציה</option>
+                <option value="🎁">🎁 הפתעה</option>
+                <option value="👨‍👩‍👧">👨‍👩‍👧 משפחה וחברים</option>
+                <option value="📝">📝 סידורים</option>
+              </select>
+              <input id="new-plan-title" type="text" placeholder="מה עושים?" onkeydown="if(event.key==='Enter') addPlan()" class="flex-1 min-w-0 px-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-sky-200 outline-none">
+            </div>
+            <div class="flex items-center gap-2">
+              <input id="new-plan-date" type="date" class="px-3 py-2 border border-gray-200 rounded-xl text-xs text-gray-600 bg-gray-50 outline-none focus:ring-2 focus:ring-sky-200">
+              <input id="new-plan-place" type="text" placeholder="איפה? (לא חובה)" onkeydown="if(event.key==='Enter') addPlan()" class="flex-1 min-w-0 px-4 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-sky-200">
+              <button onclick="addPlan()" class="bg-sky-600 hover:bg-sky-700 text-white px-5 py-2 rounded-xl text-sm font-bold transition">הוסף</button>
+            </div>
+            <p class="text-[11px] text-gray-400">בלי תאריך? זה ייכנס לרשימת הרעיונות לבילויים.</p>
+          </div>
+
+          <div id="plans-list" class="space-y-6"></div>
+        </div>
+      </section>
+
+      <!-- ================= 2. שידוך זוגות ================= -->
+      <section id="section-match" class="hidden space-y-8">
+        <div class="text-center space-y-1">
+          <h2 class="text-2xl font-black text-gray-800">שידוך זוגות 💘</h2>
+          <p class="text-xs text-gray-400">גררו 2 שמות לתוך הלב. ברגע שהם יפגשו – המסך יתפוצץ מאהבה!</p>
+        </div>
+
+        <div class="flex gap-2 max-w-md mx-auto">
+          <input id="candidate-name" type="text" placeholder="שם של רווק / רווקה..." class="flex-1 px-4 py-2.5 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-rose-200">
+          <button onclick="addCandidate()" class="bg-rose-500 hover:bg-rose-600 text-white font-bold px-6 py-2.5 rounded-2xl text-sm transition">הוסף</button>
+        </div>
+
+        <div class="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
+          <span class="block text-xs font-bold text-gray-400 mb-2">גררו שם מפה:</span>
+          <div id="candidates-pool" class="flex flex-wrap gap-2 min-h-[44px]"></div>
+        </div>
+
+        <div class="flex justify-center">
+          <div id="match-zone" ondragover="event.preventDefault()" ondrop="handleDrop(event)"
+               class="relative w-80 h-64 border-2 border-dashed border-rose-300 rounded-3xl flex flex-col items-center justify-center p-6 text-center bg-rose-50/40 hover:bg-rose-50/70 transition">
+            <div class="text-6xl mb-2">🤍</div>
+            <p class="text-xs text-gray-500">גררו לכאן 2 שמות במקביל</p>
+            <div id="slotted-pair" class="flex gap-2 mt-4 items-center"></div>
+          </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-3">
+          <h3 class="text-sm font-bold text-gray-800">זוגות ששודכו בהצלחה 💍</h3>
+          <div id="matched-pairs-list" class="space-y-2"></div>
+        </div>
+      </section>
+
+      <!-- ================= 3. המיקמק שלנו ================= -->
+      <section id="section-avatar" class="hidden space-y-8">
+        <div class="text-center space-y-1">
+          <h2 class="text-2xl font-black text-gray-800">חדר ההלבשה והמשימות 👑</h2>
+          <p class="text-xs text-gray-400">כל רוח רפאים שאוכלים ב-Pac Man שווה 200 מטבעות, וכל פריט בחנות עולה 200</p>
+        </div>
+
+        <div class="flex justify-center">
+          <div class="bg-amber-50 border border-amber-200 text-amber-800 px-6 py-2 rounded-full font-extrabold text-sm flex items-center gap-2 shadow-xs">
+            <span>💰 המטבעות של <span id="coins-owner"></span>:</span>
+            <span id="coins-count" class="text-base text-amber-900">0</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          <!-- הבמה: המיקמק עצמו -->
+          <div class="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm space-y-3 md:sticky md:top-16">
+            <div class="flex items-center justify-between">
+              <span id="avatar-user-title" class="text-xs font-black text-gray-700"></span>
+              <button onclick="downloadMikmak()" class="text-[11px] font-bold text-gray-400 hover:text-gray-800">⬇ שמירה כתמונה</button>
+            </div>
+            <div class="rounded-2xl bg-gradient-to-b from-sky-100 via-rose-50 to-amber-50 flex items-center justify-center overflow-hidden" dir="ltr">
+              <canvas id="mikmak-stage" class="block touch-none select-none"></canvas>
+            </div>
+            <p id="mikmak-hint" class="text-[11px] text-gray-400 text-center">בוחרים קטגוריה בארון, קונים פריט ב-200 מטבעות ומלבישים</p>
+
+            <!-- כוונון הפריט שנבחר -->
+            <div id="mikmak-fit" class="hidden border-t border-gray-100 pt-3 space-y-2 text-[11px] font-bold text-gray-600">
+              <div class="flex items-center justify-between">
+                <span>🎯 כוונון: <span id="mikmak-fit-name" class="text-gray-900"></span></span>
+                <button onclick="resetMikmakFit()" class="text-gray-400 hover:text-rose-500">🔄 איפוס</button>
+              </div>
+              <p class="text-[10px] font-normal text-gray-400">אפשר גם לגרור את הפריט ישירות על הדמות</p>
+              <label class="flex items-center gap-2"><span class="w-16 shrink-0">🔍 גודל</span><input id="fit-s" type="range" min="0.3" max="2.5" step="0.01" class="flex-1 accent-rose-500" oninput="setMikmakFit('s', this.value)"></label>
+              <label class="flex items-center gap-2"><span class="w-16 shrink-0">↔ צדדים</span><input id="fit-x" type="range" min="-0.6" max="0.6" step="0.005" class="flex-1 accent-rose-500" dir="ltr" oninput="setMikmakFit('x', this.value)"></label>
+              <label class="flex items-center gap-2"><span class="w-16 shrink-0">↕ גובה</span><input id="fit-y" type="range" min="-0.6" max="0.6" step="0.005" class="flex-1 accent-rose-500" dir="ltr" oninput="setMikmakFit('y', -this.value)"></label>
+              <label class="flex items-center gap-2"><span class="w-16 shrink-0">⟳ סיבוב</span><input id="fit-r" type="range" min="-30" max="30" step="0.5" class="flex-1 accent-rose-500" dir="ltr" oninput="setMikmakFit('r', this.value)"></label>
+            </div>
+          </div>
+
+          <div class="space-y-6">
+            <!-- הארון והחנות -->
+            <div class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-gray-700">👕 הארון והחנות</h3>
+                <div class="flex items-center gap-3 text-[11px] font-bold">
+                  <button id="mikmak-restore-btn" onclick="restoreMikmakItems()" class="hidden text-gray-400 hover:text-gray-800">↩ שחזור פריטים</button>
+                  <button id="mikmak-manage-btn" onclick="toggleMikmakManage()" class="text-gray-400 hover:text-rose-500">🗑 הורדת פריטים</button>
+                </div>
+              </div>
+              <div id="mikmak-cats" class="flex flex-wrap gap-1.5"></div>
+              <div id="mikmak-items" class="grid grid-cols-3 gap-2"></div>
+
+              <!-- העלאת פריט חדש -->
+              <div id="mikmak-upload" class="border border-dashed border-gray-200 rounded-2xl p-3 space-y-2">
+                <div class="text-xs font-bold text-gray-600">➕ פריט חדש לחנות</div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <select id="upload-cat" class="px-2 py-1.5 border border-gray-200 rounded-xl bg-gray-50 text-xs outline-none"></select>
+                  <input id="upload-name" type="text" placeholder="שם הפריט" class="flex-1 min-w-[100px] px-3 py-1.5 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-rose-200">
+                </div>
+                <label class="flex items-center gap-2 text-[11px] text-gray-500 cursor-pointer">
+                  <input id="upload-removebg" type="checkbox" checked class="accent-rose-500"> להסיר רקע אוטומטית (לא לסמן בתמונה שרוצים כמסגרת על החולצה)
+                </label>
+                <label class="inline-block cursor-pointer bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition">
+                  📤 בחירת תמונה
+                  <input type="file" accept="image/*" class="hidden" onchange="uploadMikmakItem(event)">
+                </label>
+              </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-3">
+              <h3 class="text-sm font-bold text-gray-700">📜 סרגל משימות יומי:</h3>
+              <div class="space-y-2" id="tasks-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 4. תמונות נעות וסרטונים מהוואטסאפ ================= -->
+      <section id="section-gallery" class="hidden space-y-6">
+        <div class="text-center space-y-1">
+          <h2 class="text-2xl font-black text-gray-800">גלריית תמונות נעות 📸</h2>
+          <p class="text-xs text-gray-400">העלו תמונות או סרטונים קצרים (Live Photos). העבירו עכבר מעל הסרטון כדי לראות אותו זז!</p>
+        </div>
+
+        <div class="text-center">
+          <label class="inline-block cursor-pointer bg-gray-900 hover:bg-black text-white px-6 py-3 rounded-2xl text-xs font-bold shadow-md transition">
+            ➕ העלאת תמונות / סרטונים נעים (Live)
+            <input type="file" accept="image/*,video/*" multiple class="hidden" onchange="uploadGalleryMedia(event)">
+          </label>
+        </div>
+
+        <div id="gallery-grid" class="grid grid-cols-2 md:grid-cols-3 gap-4"></div>
+      </section>
+
+      <!-- ================= 5. הלל Pac Man ================= -->
+      <section id="section-pacman" class="hidden space-y-5">
+        <div class="text-center space-y-1">
+          <h2 class="text-2xl font-black text-gray-800">הלל Pac Man 🟡</h2>
+          <p class="text-xs text-gray-400">עזרו להלל לבלוס את כל הנקודות בלי שהרוחות יתפסו אותו. חיצים / WASD במחשב, החלקה או כפתורים בטלפון</p>
+        </div>
+
+        <div class="max-w-[520px] mx-auto space-y-3">
+          <div class="flex items-center justify-between bg-white border border-gray-100 rounded-2xl px-4 py-2.5 shadow-sm text-xs font-bold">
+            <span class="text-gray-500">ניקוד: <span id="pm-score" class="text-gray-900 text-base font-black">0</span></span>
+            <span id="pm-lives" class="text-base tracking-widest" aria-label="חיים"></span>
+            <span class="text-gray-500">שלב <span id="pm-level" class="text-gray-900 text-base font-black">1</span></span>
+          </div>
+
+          <div class="relative bg-[#0b0f2a] rounded-3xl p-2 shadow-xl ring-1 ring-black/10" dir="ltr">
+            <canvas id="pacman-canvas" class="block mx-auto touch-none select-none rounded-2xl"></canvas>
+            <div id="pm-overlay" class="absolute inset-0 flex flex-col items-center justify-center text-center gap-3 rounded-3xl bg-[#0b0f2a]/75 backdrop-blur-[2px] cursor-pointer" dir="rtl" onclick="pacmanPrimaryAction()">
+              <div id="pm-overlay-title" class="text-3xl font-black text-amber-300 drop-shadow">הלל Pac Man</div>
+              <div id="pm-overlay-sub" class="text-sm text-gray-200 px-6 whitespace-pre-line">לחצו כדי להתחיל לבלוס</div>
+              <button class="mt-1 px-6 py-2.5 bg-amber-400 hover:bg-amber-300 text-gray-900 font-extrabold text-sm rounded-2xl shadow-lg transition" id="pm-overlay-btn">▶ התחלה</button>
+            </div>
+          </div>
+
+          <!-- כפתורי שליטה לטלפון -->
+          <div class="grid grid-cols-3 gap-2 w-44 mx-auto select-none md:hidden" dir="ltr">
+            <span></span>
+            <button data-dir="up" class="pm-pad h-12 rounded-2xl bg-gray-900 text-white text-xl font-black active:bg-amber-400 active:text-gray-900">▲</button>
+            <span></span>
+            <button data-dir="left" class="pm-pad h-12 rounded-2xl bg-gray-900 text-white text-xl font-black active:bg-amber-400 active:text-gray-900">◀</button>
+            <button data-dir="down" class="pm-pad h-12 rounded-2xl bg-gray-900 text-white text-xl font-black active:bg-amber-400 active:text-gray-900">▼</button>
+            <button data-dir="right" class="pm-pad h-12 rounded-2xl bg-gray-900 text-white text-xl font-black active:bg-amber-400 active:text-gray-900">▶</button>
+          </div>
+
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-gray-500 font-bold">🏅 <span id="pm-high-label"></span>: <span id="pm-high" class="text-gray-900">0</span></span>
+            <div class="flex items-center gap-3">
+              <button onclick="togglePacmanPause()" id="pm-pause-btn" class="text-gray-500 hover:text-gray-900 font-bold">⏸ השהיה</button>
+              <button onclick="togglePacmanEditor()" class="text-gray-500 hover:text-gray-900 font-bold">🎯 כוונון הפנים</button>
+              <label class="text-gray-400 hover:text-gray-700 cursor-pointer underline">
+                🎬 החלפת סרטון
+                <input type="file" accept="video/*,image/*" class="hidden" onchange="handlePacmanMediaUpload(event)">
+              </label>
+            </div>
+          </div>
+
+          <!-- עורך מיקום הסרטון בתוך העיגול -->
+          <div id="pm-editor" class="hidden bg-white border border-gray-100 rounded-3xl shadow-sm p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-black text-gray-800">🎯 כוונון הסרטון בתוך העיגול</h3>
+              <button onclick="togglePacmanEditor(false)" class="text-gray-300 hover:text-gray-700 text-lg leading-none">✕</button>
+            </div>
+            <p class="text-[11px] text-gray-400">גררו את הסרטון בתוך העיגול כדי להזיז אותו, וגלגלת העכבר (או המחוון) כדי להגדיל ולהקטין. מה שרואים בעיגול זה בדיוק מה שיופיע במשחק.</p>
+
+            <div class="flex justify-center">
+              <div class="bg-[#0b0f2a] rounded-3xl p-5" dir="ltr">
+                <canvas id="pm-editor-canvas" class="block cursor-grab active:cursor-grabbing touch-none select-none"></canvas>
+              </div>
+            </div>
+
+            <div class="space-y-3 text-xs font-bold text-gray-600">
+              <label class="flex items-center gap-3">
+                <span class="w-24 shrink-0">🔍 זום</span>
+                <input id="pm-crop-zoom" type="range" min="0.6" max="4" step="0.01" class="flex-1 accent-amber-500" oninput="setPacmanCrop('zoom', this.value)">
+                <span id="pm-crop-zoom-val" class="w-10 text-left tabular-nums text-gray-400"></span>
+              </label>
+              <label class="flex items-center gap-3">
+                <span class="w-24 shrink-0">↔ ימינה / שמאלה</span>
+                <input id="pm-crop-x" type="range" min="-0.6" max="0.6" step="0.005" class="flex-1 accent-amber-500" oninput="setPacmanCrop('x', -this.value * (pmCrop.mirror ? -1 : 1))" dir="ltr">
+                <span class="w-10"></span>
+              </label>
+              <label class="flex items-center gap-3">
+                <span class="w-24 shrink-0">↕ למעלה / למטה</span>
+                <input id="pm-crop-y" type="range" min="-0.6" max="0.6" step="0.005" class="flex-1 accent-amber-500" oninput="setPacmanCrop('y', -this.value)" dir="ltr">
+                <span class="w-10"></span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="pm-crop-mirror" type="checkbox" class="w-4 h-4 accent-amber-500" onchange="setPacmanCrop('mirror', this.checked)">
+                <span>🔁 היפוך (אם הפנים מסתכלות לכיוון הלא נכון)</span>
+              </label>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+              <button onclick="resetPacmanCrop()" class="text-xs text-gray-400 hover:text-rose-500 font-bold">🔄 איפוס</button>
+              <button onclick="togglePacmanEditor(false)" class="px-5 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl transition">✓ שמור וסגור</button>
+            </div>
+          </div>
+        </div>
+
+        <video id="pacman-video" src="media/pacman.mp4" muted loop playsinline preload="auto" class="hidden"></video>
+        <img id="pacman-image" alt="" class="hidden">
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    const users = {
+      "שירה": "בשמחהובטובלבב",
+      "הלל": "משפטארוךשלהרבקוק"
+    };
+
+    let currentUser = localStorage.getItem('sh_user') || 'שירה';
+    let matchAutoCloseTimer = null;
+
+    // ================= IndexedDB לשמירת סרטוני טעינה וגלריה ללא מגבלת מקום =================
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('ShiraHallelMediaDB_v2', 2);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('store')) {
+            db.createObjectStore('store');
+          }
+          if (!db.objectStoreNames.contains('gallery')) {
+            db.createObjectStore('gallery', { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function saveMediaToDB(file, key = 'loading_media') {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('store', 'readwrite');
+        tx.objectStore('store').put(file, key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function getMediaFromDB(key = 'loading_media') {
+      const db = await openDB();
+      return new Promise((resolve) => {
+        const tx = db.transaction('store', 'readonly');
+        const req = tx.objectStore('store').get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+    }
+
+    async function handleMediaUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      await saveMediaToDB(file);
+      await loadLoadingMedia();
+      alert('הסרטון/תמונה נשמרו בהצלחה! יופעלו בכל כניסה.');
+    }
+
+    async function loadLoadingMedia() {
+      const media = await getMediaFromDB();
+      const videoEl = document.getElementById('loader-video');
+      const imgEl = document.getElementById('loader-image');
+      const placeholder = document.getElementById('loader-placeholder');
+
+      if (!media) {
+        placeholder.classList.remove('hidden');
+        videoEl.classList.add('hidden');
+        imgEl.classList.add('hidden');
+        return;
+      }
+
+      placeholder.classList.add('hidden');
+      const url = URL.createObjectURL(media);
+
+      if (media.type.startsWith('video/')) {
+        imgEl.classList.add('hidden');
+        videoEl.src = url;
+        videoEl.classList.remove('hidden');
+        videoEl.play().catch(()=>{});
+      } else {
+        videoEl.classList.add('hidden');
+        imgEl.src = url;
+        imgEl.classList.remove('hidden');
+      }
+    }
+
+    // ================= התחברות =================
+    async function handleLogin() {
+      const u = document.getElementById('username').value.trim();
+      const p = document.getElementById('password').value.replace(/\s+/g, '');
+      const err = document.getElementById('login-error');
+
+      if (users[u] && users[u] === p) {
+        currentUser = u;
+        localStorage.setItem('sh_user', u);
+        sessionStorage.setItem('sh_logged', 'true');
+        document.getElementById('login-modal').classList.add('hidden');
+
+        await loadLoadingMedia();
+
+        const loader = document.getElementById('loading-screen');
+        loader.classList.remove('hidden');
+
+        setTimeout(() => {
+          loader.classList.add('hidden');
+          document.getElementById('site-content').classList.remove('hidden');
+          initSite();
+        }, 1500);
+
+      } else {
+        err.classList.remove('hidden');
+      }
+    }
+
+    function logout() {
+      sessionStorage.removeItem('sh_logged');
+      location.reload();
+    }
+
+    if (sessionStorage.getItem('sh_logged') === 'true') {
+      document.getElementById('login-modal').classList.add('hidden');
+      document.getElementById('site-content').classList.remove('hidden');
+      window.onload = initSite;
+    }
+
+    function initSite() {
+      document.getElementById('greeting-badge').innerText = `מחובר/ת כעת: ${currentUser} ✨`;
+      document.getElementById('avatar-user-title').innerText = `דמות: ${currentUser}`;
+      loadCover();
+      renderScoreboard();
+      renderTopics();
+      renderPlans();
+      switchTopicsCategory(localStorage.getItem('sh_topics_cat') || 'talk');
+      renderCandidates();
+      renderMatchedList();
+      initMikmak();
+      renderTasks();
+      loadGalleryFromDB();
+      initPacman();
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeMatchOverlay();
+      });
+    }
+
+    function switchTab(tab) {
+      if (tab !== 'pacman') pausePacman();
+      ['scoreboard', 'topics', 'match', 'avatar', 'gallery', 'pacman'].forEach(t => {
+        document.getElementById(`section-${t}`).classList.add('hidden');
+        const b = document.getElementById(`tab-btn-${t}`);
+        b.classList.remove('text-blue-600', 'text-rose-500', 'border-b-2', 'border-blue-600', 'border-rose-500');
+        b.classList.add('text-gray-400');
+      });
+      document.getElementById(`section-${tab}`).classList.remove('hidden');
+      if (tab === 'pacman') resizePacman();
+      if (tab === 'avatar' && mk.ready) renderMikmakStage();
+      const active = document.getElementById(`tab-btn-${tab}`);
+      active.classList.remove('text-gray-400');
+      active.classList.add(tab === 'scoreboard' ? 'text-blue-600' : 'text-rose-500', 'border-b-2', tab === 'scoreboard' ? 'border-blue-600' : 'border-rose-500');
+    }
+
+    // ================= מאזן ניקוד + איפוס =================
+    let scores = JSON.parse(localStorage.getItem('sh_scores_data') || JSON.stringify({
+      hallel: 0,
+      shira: 0,
+      history: []
+    }));
+
+    function renderScoreboard() {
+      document.getElementById('score-hallel').innerText = scores.hallel;
+      document.getElementById('score-shira').innerText = scores.shira;
+
+      const leaderText = document.getElementById('leader-text');
+      if (scores.hallel > scores.shira) {
+        leaderText.innerText = `🔵 הלל מוביל ביתרון של ${scores.hallel - scores.shira} נקודות!`;
+        leaderText.className = "text-xs font-bold text-blue-600";
+      } else if (scores.shira > scores.hallel) {
+        leaderText.innerText = `🌸 שירה מובילה ביתרון של ${scores.shira - scores.hallel} נקודות!`;
+        leaderText.className = "text-xs font-bold text-rose-500";
+      } else {
+        leaderText.innerText = `⚡ תיקו מותח בין הלל לשירה (${scores.hallel} - ${scores.shira})`;
+        leaderText.className = "text-xs font-bold text-gray-500";
+      }
+
+      const histEl = document.getElementById('score-history');
+      if (scores.history.length === 0) {
+        histEl.innerHTML = `<span class="text-xs text-gray-400">עוד לא נרשמו נקודות</span>`;
+      } else {
+        histEl.innerHTML = scores.history.slice(0, 5).map(h => {
+          if (h.person === 'system') {
+            return `
+              <div class="flex items-center justify-between text-xs p-2 rounded-xl bg-gray-50 text-gray-500 border border-gray-100">
+                <span class="font-bold">🔄 ${h.reason}</span>
+                <span class="text-[10px] text-gray-400">${h.date}</span>
+              </div>
+            `;
+          }
+          return `
+            <div class="flex items-center justify-between text-xs p-2.5 rounded-xl border border-gray-100 ${h.person === 'hallel' ? 'bg-blue-50/40 text-blue-800' : 'bg-rose-50/40 text-rose-800'}">
+              <span class="font-bold">${h.person === 'hallel' ? '🔵 הלל' : '🌸 שירה'}: ${h.reason}</span>
+              <span class="font-extrabold">${h.delta > 0 ? '+' : ''}${h.delta}</span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      localStorage.setItem('sh_scores_data', JSON.stringify(scores));
+    }
+
+    function changeScore(person, delta) {
+      scores[person] += delta;
+      scores.history.unshift({
+        person,
+        delta,
+        reason: delta > 0 ? "נקודה כללית" : "הורדת נקודה",
+        date: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+      });
+      if (delta > 0) confetti({ particleCount: 25, spread: 40 });
+      renderScoreboard();
+    }
+
+    function addPointWithReason(person) {
+      const input = document.getElementById('score-reason');
+      const reason = input.value.trim() || "נקודת בונוס";
+      scores[person] += 1;
+      scores.history.unshift({
+        person,
+        delta: 1,
+        reason: reason,
+        date: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+      });
+      input.value = '';
+      confetti({ particleCount: 35, spread: 50 });
+      renderScoreboard();
+    }
+
+    function resetScoreboard() {
+      if (!confirm('האם אתם בטוחים שברצונכם לאפס את התוצאה ל-0:0?')) return;
+      scores.hallel = 0;
+      scores.shira = 0;
+      scores.history.unshift({
+        person: 'system',
+        delta: 0,
+        reason: 'איפוס לוח הניקוד',
+        date: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+      });
+      renderScoreboard();
+    }
+
+    // ================= תמונות שער =================
+    function changeCoverPhoto(e) {
+      const f = e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = (ev) => {
+        document.getElementById('cover-photo').src = ev.target.result;
+        localStorage.setItem('sh_cover_img', ev.target.result);
+      };
+      r.readAsDataURL(f);
+    }
+    function loadCover() {
+      const c = localStorage.getItem('sh_cover_img');
+      if (c) document.getElementById('cover-photo').src = c;
+    }
+
+    // ================= נושאי שיחה =================
+    let topics = JSON.parse(localStorage.getItem('sh_topics_v2') || JSON.stringify([
+      { id: 1, emoji: '🍕', title: 'איפה אוכלים ביום שישי?', note: 'בדקנו את המסעדה האיטלקית החדשה!' },
+      { id: 2, emoji: '✈️', title: 'תכנון לחופשה הבאה', note: 'רעיונות: צפון, רמת הגולן או חו"ל.' }
+    ]));
+
+    const openTopicIds = new Set();   // אילו פריטים פתוחים, כדי שלא ייסגרו בכל רענון
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    function switchTopicsCategory(cat) {
+      localStorage.setItem('sh_topics_cat', cat);
+      ['talk', 'plans'].forEach(c => {
+        document.getElementById(`topics-panel-${c}`).classList.toggle('hidden', c !== cat);
+        const btn = document.getElementById(`topics-cat-${c}`);
+        const active = c === cat;
+        btn.classList.toggle('bg-white', active);
+        btn.classList.toggle('shadow-sm', active);
+        btn.classList.toggle('text-gray-900', active);
+        btn.classList.toggle('text-gray-400', !active);
+      });
+    }
+
+    function toggleTopicItem(key) {
+      if (openTopicIds.has(key)) openTopicIds.delete(key); else openTopicIds.add(key);
+      const body = document.getElementById(`item-body-${key}`);
+      const chev = document.getElementById(`item-chev-${key}`);
+      if (body) body.classList.toggle('hidden', !openTopicIds.has(key));
+      if (chev) chev.classList.toggle('rotate-90', !openTopicIds.has(key));
+    }
+
+    function renderTopics() {
+      const list = document.getElementById('topics-list');
+      const open = topics.filter(t => !t.done), done = topics.filter(t => t.done);
+      const card = (t) => {
+        const key = `t${t.id}`, isOpen = openTopicIds.has(key);
+        const preview = (t.note || '').split('\n')[0];
+        return `
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-xs transition hover:shadow-sm ${t.done ? 'opacity-60' : ''}">
+            <div class="flex items-center gap-3 px-4 py-3 cursor-pointer select-none" onclick="toggleTopicItem('${key}')">
+              <span id="item-chev-${key}" class="text-gray-300 text-xs transition-transform ${isOpen ? '' : 'rotate-90'}">▼</span>
+              <span class="text-2xl">${t.emoji}</span>
+              <div class="flex-1 min-w-0">
+                <div class="font-bold text-gray-800 text-sm ${t.done ? 'line-through' : ''}">${escapeHtml(t.title)}</div>
+                ${preview ? `<div class="text-[11px] text-gray-400 truncate">${escapeHtml(preview)}</div>` : ''}
+              </div>
+              ${t.note ? '<span class="text-xs" title="יש פתק">📝</span>' : ''}
+            </div>
+            <div id="item-body-${key}" class="${isOpen ? '' : 'hidden'} px-4 pb-4 pt-1 space-y-2.5 border-t border-gray-50">
+              <textarea oninput="saveTopicNote(${t.id}, this.value)" rows="3" placeholder="מה רוצים להגיד, מה הוחלט, מחשבות..." class="w-full mt-2 text-xs p-3 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-rose-200">${escapeHtml(t.note)}</textarea>
+              <div class="flex items-center justify-between">
+                <button onclick="toggleTopicDone(${t.id})" class="text-xs font-bold px-3 py-1.5 rounded-xl transition ${t.done ? 'bg-gray-100 text-gray-500 hover:bg-gray-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}">
+                  ${t.done ? '↩ להחזיר לרשימה' : '✓ דיברנו על זה'}
+                </button>
+                <button onclick="deleteTopic(${t.id})" class="text-xs text-gray-300 hover:text-rose-500 font-bold">🗑 מחיקה</button>
+              </div>
+            </div>
+          </div>`;
+      };
+
+      list.innerHTML =
+        (open.length ? open.map(card).join('') : `<div class="text-center text-xs text-gray-400 py-6">אין נושאים פתוחים. הכול דובר! 🎉</div>`) +
+        (done.length ? `<div class="pt-3 text-[11px] font-bold text-gray-400">✓ דיברנו כבר (${done.length})</div>` + done.map(card).join('') : '');
+
+      document.getElementById('talk-count').innerText = open.length ? `(${open.length})` : '';
+      localStorage.setItem('sh_topics_v2', JSON.stringify(topics));
+    }
+
+    function saveTopicNote(id, val) {
+      const t = topics.find(item => item.id === id);
+      if (t) { t.note = val; localStorage.setItem('sh_topics_v2', JSON.stringify(topics)); }
+    }
+    function toggleTopicDone(id) {
+      const t = topics.find(item => item.id === id);
+      if (!t) return;
+      t.done = !t.done;
+      openTopicIds.delete(`t${id}`);
+      renderTopics();
+    }
+    function addTopic() {
+      const title = document.getElementById('new-topic-title');
+      const emoji = document.getElementById('topic-emoji').value;
+      if (title.value.trim()) {
+        topics.unshift({ id: Date.now(), emoji: emoji, title: title.value.trim(), note: '', done: false });
+        title.value = '';
+        renderTopics();
+      }
+    }
+    function deleteTopic(id) {
+      if (!confirm('למחוק את הנושא?')) return;
+      topics = topics.filter(t => t.id !== id);
+      renderTopics();
+    }
+
+    // ================= תכנונים ובילויים =================
+    let plans = JSON.parse(localStorage.getItem('sh_plans') || JSON.stringify([
+      { id: 1, emoji: '🥾', title: 'טיול זריחה ביחד', date: '', place: '', note: '', done: false }
+    ]));
+
+    function planDayDiff(date) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      return Math.round((new Date(date + 'T00:00:00') - today) / 86400000);
+    }
+
+    function planWhenBadge(p) {
+      if (!p.date) return '';
+      const nice = new Date(p.date + 'T00:00:00').toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'short' });
+      if (p.done) return `<span class="text-[11px] text-gray-400">${nice}</span>`;
+      const d = planDayDiff(p.date);
+      let label, cls;
+      if (d < 0) { label = 'התאריך עבר'; cls = 'bg-amber-50 text-amber-700'; }
+      else if (d === 0) { label = 'היום! 🎉'; cls = 'bg-rose-500 text-white'; }
+      else if (d === 1) { label = 'מחר'; cls = 'bg-rose-50 text-rose-600'; }
+      else { label = `בעוד ${d} ימים`; cls = 'bg-sky-50 text-sky-700'; }
+      return `<span class="text-[11px] text-gray-400">${nice}</span><span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${cls}">${label}</span>`;
+    }
+
+    function renderPlans() {
+      const list = document.getElementById('plans-list');
+      const upcoming = plans.filter(p => !p.done && p.date).sort((a, b) => a.date.localeCompare(b.date));
+      const ideas = plans.filter(p => !p.done && !p.date);
+      const done = plans.filter(p => p.done).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+      const card = (p) => {
+        const key = `p${p.id}`, isOpen = openTopicIds.has(key);
+        return `
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-xs transition hover:shadow-sm ${p.done ? 'opacity-60' : ''}">
+            <div class="flex items-center gap-3 px-4 py-3 cursor-pointer select-none" onclick="toggleTopicItem('${key}')">
+              <span id="item-chev-${key}" class="text-gray-300 text-xs transition-transform ${isOpen ? '' : 'rotate-90'}">▼</span>
+              <span class="text-2xl">${p.emoji}</span>
+              <div class="flex-1 min-w-0">
+                <div class="font-bold text-gray-800 text-sm ${p.done ? 'line-through' : ''}">${escapeHtml(p.title)}</div>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+                  ${planWhenBadge(p)}
+                  ${p.place ? `<span class="text-[11px] text-gray-400">📍 ${escapeHtml(p.place)}</span>` : ''}
+                </div>
+              </div>
+              ${p.note ? '<span class="text-xs" title="יש פתק">📝</span>' : ''}
+            </div>
+            <div id="item-body-${key}" class="${isOpen ? '' : 'hidden'} px-4 pb-4 pt-3 space-y-2.5 border-t border-gray-50">
+              <div class="flex items-center gap-2">
+                <input type="date" value="${p.date || ''}" onchange="updatePlan(${p.id}, 'date', this.value, true)" class="px-3 py-2 border border-gray-200 rounded-xl text-xs text-gray-600 bg-gray-50 outline-none focus:ring-2 focus:ring-sky-200">
+                <input type="text" value="${escapeHtml(p.place)}" placeholder="📍 איפה?" oninput="updatePlan(${p.id}, 'place', this.value)" onchange="renderPlans()" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50 outline-none focus:ring-2 focus:ring-sky-200">
+              </div>
+              <textarea oninput="updatePlan(${p.id}, 'note', this.value)" rows="3" placeholder="פרטים: מה להביא, הזמנת מקום, כמה עולה, רעיונות..." class="w-full text-xs p-3 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-sky-200">${escapeHtml(p.note)}</textarea>
+              <div class="flex items-center justify-between">
+                <button onclick="togglePlanDone(${p.id})" class="text-xs font-bold px-3 py-1.5 rounded-xl transition ${p.done ? 'bg-gray-100 text-gray-500 hover:bg-gray-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}">
+                  ${p.done ? '↩ עוד לא עשינו' : '✓ עשינו את זה!'}
+                </button>
+                <button onclick="deletePlan(${p.id})" class="text-xs text-gray-300 hover:text-rose-500 font-bold">🗑 מחיקה</button>
+              </div>
+            </div>
+          </div>`;
+      };
+
+      const group = (title, items, empty) => `
+        <div class="space-y-2.5">
+          <h3 class="text-xs font-black text-gray-500">${title} ${items.length ? `<span class="font-bold text-gray-300">(${items.length})</span>` : ''}</h3>
+          ${items.length ? items.map(card).join('') : `<div class="text-[11px] text-gray-400 bg-white/60 border border-dashed border-gray-200 rounded-2xl px-4 py-3">${empty}</div>`}
+        </div>`;
+
+      list.innerHTML =
+        group('📅 בקרוב', upcoming, 'אין עדיין תוכניות עם תאריך. אולי הגיע הזמן לקבוע משהו? 😉') +
+        group('💡 רעיונות לבילויים', ideas, 'אין רעיונות כרגע. הוסיפו משהו בלי תאריך.') +
+        (done.length ? group('✅ עשינו כבר', done, '') : '');
+
+      const pending = upcoming.length + ideas.length;
+      document.getElementById('plans-count').innerText = pending ? `(${pending})` : '';
+      localStorage.setItem('sh_plans', JSON.stringify(plans));
+    }
+
+    function addPlan() {
+      const title = document.getElementById('new-plan-title');
+      const date = document.getElementById('new-plan-date');
+      const place = document.getElementById('new-plan-place');
+      if (!title.value.trim()) { title.focus(); return; }
+      plans.unshift({
+        id: Date.now(),
+        emoji: document.getElementById('plan-emoji').value,
+        title: title.value.trim(),
+        date: date.value,
+        place: place.value.trim(),
+        note: '',
+        done: false
+      });
+      title.value = ''; date.value = ''; place.value = '';
+      renderPlans();
+    }
+
+    function updatePlan(id, field, value, rerender = false) {
+      const p = plans.find(item => item.id === id);
+      if (!p) return;
+      p[field] = value;
+      localStorage.setItem('sh_plans', JSON.stringify(plans));
+      if (rerender) renderPlans();
+    }
+
+    function togglePlanDone(id) {
+      const p = plans.find(item => item.id === id);
+      if (!p) return;
+      p.done = !p.done;
+      openTopicIds.delete(`p${id}`);
+      if (p.done) confetti({ particleCount: 60, spread: 60, zIndex: 900 });
+      renderPlans();
+    }
+
+    function deletePlan(id) {
+      if (!confirm('למחוק את התוכנית?')) return;
+      plans = plans.filter(p => p.id !== id);
+      renderPlans();
+    }
+
+    // ================= שידוכים =================
+    let candidates = JSON.parse(localStorage.getItem('sh_candidates') || '["דוד", "רחל", "אורי", "תהילה"]');
+    let matchedPairs = JSON.parse(localStorage.getItem('sh_matched') || '[]');
+    let currentInSlot = [];
+
+    function renderCandidates() {
+      const pool = document.getElementById('candidates-pool');
+      pool.innerHTML = '';
+      candidates.forEach(name => {
+        const badge = document.createElement('span');
+        badge.draggable = true;
+        badge.ondragstart = (e) => e.dataTransfer.setData('text/plain', name);
+        badge.className = "cursor-grab active:cursor-grabbing bg-white border border-gray-200 text-gray-700 text-xs px-3.5 py-1.5 rounded-full shadow-xs hover:border-rose-300 font-semibold";
+        badge.innerText = name;
+        pool.appendChild(badge);
+      });
+      localStorage.setItem('sh_candidates', JSON.stringify(candidates));
+    }
+
+    function addCandidate() {
+      const val = document.getElementById('candidate-name').value.trim();
+      if (val && !candidates.includes(val)) {
+        candidates.push(val);
+        document.getElementById('candidate-name').value = '';
+        renderCandidates();
+      }
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      const name = e.dataTransfer.getData('text/plain');
+      if (!name || currentInSlot.includes(name)) return;
+      currentInSlot.push(name);
+      renderSlot();
+
+      if (currentInSlot.length === 2) {
+        launchFullMatchAnimation(currentInSlot[0], currentInSlot[1]);
+        currentInSlot = [];
+        renderSlot();
+      }
+    }
+
+    function renderSlot() {
+      const slot = document.getElementById('slotted-pair');
+      slot.innerHTML = currentInSlot.map(n => `<span class="bg-white border border-rose-400 text-rose-600 px-3 py-1 rounded-xl font-bold text-xs shadow-xs">${n}</span>`).join('<span class="text-xs text-rose-400 font-bold">+</span>');
+    }
+
+    function launchFullMatchAnimation(p1, p2) {
+      document.getElementById('match-p1').innerText = p1;
+      document.getElementById('match-p2').innerText = p2;
+
+      const overlay = document.getElementById('fullscreen-match-overlay');
+      const box = document.getElementById('match-popup-box');
+      overlay.classList.remove('hidden');
+      box.classList.add('giant-match-active');
+
+      const end = Date.now() + 2 * 1000;
+      (function frame() {
+        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, zIndex: 900 });
+        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, zIndex: 900 });
+        if (Date.now() < end) requestAnimationFrame(frame);
+      }());
+
+      candidates = candidates.filter(c => c !== p1 && c !== p2);
+      matchedPairs.unshift({ p1, p2, date: new Date().toLocaleDateString('he-IL') });
+
+      localStorage.setItem('sh_matched', JSON.stringify(matchedPairs));
+      renderCandidates();
+      renderMatchedList();
+
+      clearTimeout(matchAutoCloseTimer);
+      matchAutoCloseTimer = setTimeout(closeMatchOverlay, 6000);
+    }
+
+    function closeMatchOverlay() {
+      clearTimeout(matchAutoCloseTimer);
+      document.getElementById('fullscreen-match-overlay').classList.add('hidden');
+      const box = document.getElementById('match-popup-box');
+      if (box) box.classList.remove('giant-match-active');
+    }
+
+    function renderMatchedList() {
+      const list = document.getElementById('matched-pairs-list');
+      if (matchedPairs.length === 0) {
+        list.innerHTML = `<span class="text-xs text-gray-400">טרם שודכו זוגות</span>`;
+        return;
+      }
+      list.innerHTML = matchedPairs.map((pair, idx) => `
+        <div class="flex items-center justify-between bg-rose-50/50 border border-rose-100 px-4 py-2 rounded-2xl text-xs">
+          <span class="font-extrabold text-rose-600">${pair.p1} ❤️ ${pair.p2}</span>
+          <button onclick="removeMatch(${idx})" class="text-gray-300 hover:text-rose-500">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function removeMatch(idx) {
+      matchedPairs.splice(idx, 1);
+      localStorage.setItem('sh_matched', JSON.stringify(matchedPairs));
+      renderMatchedList();
+    }
+
+    // ================= מטבעות (ארנק נפרד לכל אחד) =================
+    function getCoins(user = currentUser) {
+      const v = localStorage.getItem(`sh_coins_${user}`);
+      if (v !== null) return parseInt(v);
+      return parseInt(localStorage.getItem('sh_coins') || '150'); // ירושה מהארנק המשותף הישן
+    }
+    function addCoins(n, user = currentUser) {
+      localStorage.setItem(`sh_coins_${user}`, Math.max(0, getCoins(user) + n));
+      if (typeof renderMikmakUI === 'function' && mk.ready) renderMikmakUI();
+    }
+
+    // ================= מיקמק: דמות, ארון וחנות =================
+    const MIKMAK_PRICE = 200;
+
+    // תמונות מוטמעות (data URI) לא "מלכלכות" את הקנבס, כך שהעיבוד עובד גם בפתיחה ישירה של הקובץ
+    const mikmakAsset = (name) => (window.MIKMAK_ASSETS && window.MIKMAK_ASSETS[name]) || `media/mikmak/${name}.png`;
+
+    // נקודות העיגון בפיקסלים של התמונה המקורית של כל דמות
+    const MIKMAK_CHARS = {
+      'הלל': {
+        src: mikmakAsset('base-hallel'),
+        eyes: [{ x: 188, y: 108 }, { x: 240, y: 110 }],
+        headTop: { x: 207, y: 30 }, headW: 140,
+        chest: { x: 248, y: 312, w: 150 },
+        medal: { x: 345, y: 118, r: 48 },
+        shirt: { minY: 188, edge: 10, seeds: [[250, 300], [150, 330], [330, 300], [250, 430]],
+                 test: (r, g, b, lum, sat) => lum < 150 && sat < 0.32 }
+      },
+      'שירה': {
+        src: mikmakAsset('base-shira'),
+        eyes: [{ x: 395, y: 112 }, { x: 445, y: 106 }],
+        headTop: { x: 410, y: 32 }, headW: 130,
+        chest: { x: 440, y: 385, w: 140 },
+        medal: { x: 548, y: 122, r: 46 },
+        shirt: { minY: 215, edge: 10, seeds: [[430, 440], [330, 440], [560, 420], [600, 380]],
+                 test: (r, g, b, lum, sat) => lum > 140 && sat < 0.2 }
+      }
+    };
+
+    const MIKMAK_CATS = [
+      { id: 'glasses', label: '🕶️ משקפיים', upload: true },
+      { id: 'color', label: '🎨 צבע חולצה' },
+      { id: 'print', label: '🖼️ הדפס', upload: true },
+      { id: 'hair', label: '💇 שיער', upload: true },
+      { id: 'hat', label: '🎩 כובע', upload: true },
+      { id: 'badge', label: '🏅 סמלים' }
+    ];
+
+    const MIKMAK_BUILTIN = [
+      { id: 'glasses-gold', cat: 'glasses', name: 'משקפי זהב', kind: 'vector', draw: (ctx, w) => drawGoldGlasses(ctx, w) },
+      { id: 'glasses-meme', cat: 'glasses', name: 'Thug Life', kind: 'image', src: mikmakAsset('glasses-meme'), removeBg: true },
+      { id: 'color-original', cat: 'color', name: 'מקורי', kind: 'color', hex: null, free: true },
+      { id: 'color-black', cat: 'color', name: 'שחור', kind: 'color', hex: '#1f2937' },
+      { id: 'color-white', cat: 'color', name: 'לבן', kind: 'color', hex: '#f1f5f9' },
+      { id: 'color-red', cat: 'color', name: 'אדום', kind: 'color', hex: '#dc2626' },
+      { id: 'color-blue', cat: 'color', name: 'כחול', kind: 'color', hex: '#2563eb' },
+      { id: 'color-pink', cat: 'color', name: 'ורוד', kind: 'color', hex: '#ec4899' },
+      { id: 'color-yellow', cat: 'color', name: 'צהוב', kind: 'color', hex: '#facc15' },
+      { id: 'color-green', cat: 'color', name: 'ירוק', kind: 'color', hex: '#16a34a' },
+      { id: 'color-purple', cat: 'color', name: 'סגול', kind: 'color', hex: '#7c3aed' },
+      { id: 'print-shira', cat: 'print', name: 'שירה על החולצה', kind: 'image', src: mikmakAsset('print-shira'), crop: { x: 130, y: 2, w: 482, h: 506 }, frame: true },
+      { id: 'print-unicorn', cat: 'print', name: 'חד קרן', kind: 'image', src: mikmakAsset('print-unicorn'), removeBg: true },
+      { id: 'hat-crown', cat: 'hat', name: 'כתר', kind: 'emoji', emoji: '👑' },
+      { id: 'hat-top', cat: 'hat', name: 'מגבעת', kind: 'emoji', emoji: '🎩' },
+      { id: 'hat-cap', cat: 'hat', name: 'כובע מצחייה', kind: 'emoji', emoji: '🧢' },
+      { id: 'badge-medal', cat: 'badge', name: 'סמל מנוי', kind: 'image', src: mikmakAsset('medal'), removeBg: true, free: true }
+    ];
+
+    const mk = {
+      ready: false, loading: null, charKey: null, char: null, items: [], cat: 'glasses',
+      state: null, fits: {}, stage: null, ctx: null, vb: null, scale: 1, drag: null,
+      hidden: JSON.parse(localStorage.getItem('sh_mikmak_hidden') || '[]'), manage: false
+    };
+    const MIKMAK_LOCKED = ['color-original', 'badge-medal']; // פריטים שאי אפשר להוריד מהחנות
+
+    // ---------- עיבוד תמונה: הסרת רקע, חיתוך, מסכת חולצה ----------
+    function loadImageEl(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    function toCanvas(img, crop, maxSide = 0) {
+      const c = crop || { x: 0, y: 0, w: img.naturalWidth || img.width, h: img.naturalHeight || img.height };
+      const k = maxSide && Math.max(c.w, c.h) > maxSide ? maxSide / Math.max(c.w, c.h) : 1;
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(c.w * k);
+      cv.height = Math.round(c.h * k);
+      cv.getContext('2d').drawImage(img, c.x, c.y, c.w, c.h, 0, 0, cv.width, cv.height);
+      return cv;
+    }
+
+    // מוחק פיקסלים שעומדים בתנאי ומחוברים לשולי התמונה או לאזור שכבר נמחק
+    function floodErase(data, w, h, pred) {
+      const seen = new Uint8Array(w * h);
+      const stack = [];
+      const push = (i) => { if (!seen[i]) { seen[i] = 1; stack.push(i); } };
+      for (let i = 0; i < w * h; i++) {
+        const x = i % w, y = (i / w) | 0;
+        const border = x === 0 || y === 0 || x === w - 1 || y === h - 1;
+        if (data[i * 4 + 3] === 0) push(i);
+        else if (border && pred(data[i * 4], data[i * 4 + 1], data[i * 4 + 2])) push(i);
+      }
+      while (stack.length) {
+        const i = stack.pop();
+        data[i * 4 + 3] = 0;
+        const x = i % w, y = (i / w) | 0;
+        for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const j = ny * w + nx;
+          if (!seen[j] && data[j * 4 + 3] > 0 && pred(data[j * 4], data[j * 4 + 1], data[j * 4 + 2])) push(j);
+        }
+      }
+    }
+
+    // ריכוך שוליים: פיקסל שנוגע ברקע שנמחק וקרוב לצבע הרקע הופך לשקוף-למחצה
+    function softenEdges(data, w, h, nearBg) {
+      const alpha0 = (x, y) => x < 0 || y < 0 || x >= w || y >= h || data[(y * w + x) * 4 + 3] === 0;
+      const updates = [];
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (data[i + 3] === 0) continue;
+        if (alpha0(x + 1, y) || alpha0(x - 1, y) || alpha0(x, y + 1) || alpha0(x, y - 1)) {
+          updates.push([i + 3, Math.round(255 * (1 - nearBg(data[i], data[i + 1], data[i + 2])))]);
+        }
+      }
+      updates.forEach(([i, a]) => { data[i] = Math.min(data[i], a); });
+    }
+
+    // המיקמק הבסיסי: מדבקה עם שוליים לבנים על רקע שחור/לבן
+    function cutStickerBackground(cv) {
+      const ctx = cv.getContext('2d');
+      const im = ctx.getImageData(0, 0, cv.width, cv.height);
+      const nearWhite = (r, g, b) => Math.min(r, g, b) > 236;
+      const nearBlack = (r, g, b) => Math.max(r, g, b) < 46;
+      floodErase(im.data, cv.width, cv.height, nearWhite);
+      floodErase(im.data, cv.width, cv.height, nearBlack);
+      softenEdges(im.data, cv.width, cv.height, (r, g, b) => Math.max(0, 1 - Math.max(r, g, b) / 90));
+      ctx.putImageData(im, 0, 0);
+      return cv;
+    }
+
+    // רקע אוטומטי לפריטים: הצבע הנפוץ בשולי התמונה
+    function cutAutoBackground(cv) {
+      const ctx = cv.getContext('2d'), w = cv.width, h = cv.height;
+      const im = ctx.getImageData(0, 0, w, h), d = im.data;
+      // הצבע הנפוץ בשוליים, וממוצע הפיקסלים האמיתיים שלו
+      const counts = new Map();
+      const sample = (x, y) => {
+        const i = (y * w + x) * 4;
+        if (d[i + 3] < 128) return;
+        const k = `${d[i] >> 4},${d[i + 1] >> 4},${d[i + 2] >> 4}`;
+        const c = counts.get(k) || { n: 0, r: 0, g: 0, b: 0 };
+        c.n++; c.r += d[i]; c.g += d[i + 1]; c.b += d[i + 2];
+        counts.set(k, c);
+      };
+      for (let x = 0; x < w; x++) { sample(x, 0); sample(x, h - 1); }
+      for (let y = 0; y < h; y++) { sample(0, y); sample(w - 1, y); }
+      if (!counts.size) return cv; // כבר שקוף
+      const best = [...counts.values()].sort((a, b) => b.n - a.n)[0];
+      const br = best.r / best.n, bg = best.g / best.n, bb = best.b / best.n;
+      const dist = (r, g, b) => Math.hypot(r - br, g - bg, b - bb);
+      floodErase(d, w, h, (r, g, b) => dist(r, g, b) < 46);
+      softenEdges(d, w, h, (r, g, b) => Math.max(0, 1 - dist(r, g, b) / 110));
+      ctx.putImageData(im, 0, 0);
+      return cv;
+    }
+
+    function alphaBBox(cv) {
+      const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+      let x0 = cv.width, y0 = cv.height, x1 = -1, y1 = -1;
+      for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) {
+        if (d[(y * cv.width + x) * 4 + 3] > 12) {
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+      }
+      return x1 < 0 ? { x: 0, y: 0, w: cv.width, h: cv.height } : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+    }
+
+    function autoCrop(cv) {
+      const b = alphaBBox(cv);
+      return toCanvas(cv, b);
+    }
+
+    // מסכת החולצה: צבע מתאים + מחובר לנקודות זרע + רחוק מהשוליים הלבנים של המדבקה
+    function buildShirtMask(cv, cfg) {
+      const w = cv.width, h = cv.height;
+      const d = cv.getContext('2d').getImageData(0, 0, w, h).data;
+      // מרחק (בצעדים) מהרקע השקוף
+      const dist = new Uint8Array(w * h).fill(255);
+      let frontier = [];
+      for (let i = 0; i < w * h; i++) if (d[i * 4 + 3] < 128) { dist[i] = 0; frontier.push(i); }
+      for (let step = 1; step <= cfg.edge && frontier.length; step++) {
+        const next = [];
+        for (const i of frontier) {
+          const x = i % w, y = (i / w) | 0;
+          for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+            const j = ny * w + nx;
+            if (dist[j] === 255) { dist[j] = step; next.push(j); }
+          }
+        }
+        frontier = next;
+      }
+      const ok = (i) => {
+        if (dist[i] <= cfg.edge || ((i / w) | 0) < cfg.minY) return false;
+        const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        return cfg.test(r, g, b, 0.299 * r + 0.587 * g + 0.114 * b, mx ? (mx - mn) / mx : 0);
+      };
+      const mask = new Uint8ClampedArray(w * h);
+      const stack = [];
+      cfg.seeds.forEach(([x, y]) => { const i = y * w + x; if (ok(i)) { mask[i] = 255; stack.push(i); } });
+      while (stack.length) {
+        const i = stack.pop(), x = i % w, y = (i / w) | 0;
+        for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const j = ny * w + nx;
+          if (!mask[j] && ok(j)) { mask[j] = 255; stack.push(j); }
+        }
+      }
+      // סגירת חורים קטנים (טקסטורה, צללים) + ריכוך קל
+      const closed = new Uint8ClampedArray(mask);
+      for (let pass = 0; pass < 2; pass++) {
+        for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+          const i = y * w + x;
+          if (closed[i] || dist[i] <= cfg.edge - 3) continue;
+          const n = (closed[i - 1] > 0) + (closed[i + 1] > 0) + (closed[i - w] > 0) + (closed[i + w] > 0);
+          if (n >= 3) closed[i] = 255;
+        }
+      }
+      const soft = new Uint8ClampedArray(w * h);
+      for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+        const i = y * w + x;
+        soft[i] = (closed[i] * 4 + closed[i - 1] + closed[i + 1] + closed[i - w] + closed[i + w]) / 8;
+      }
+      let sum = 0, n = 0;
+      for (let i = 0; i < w * h; i++) if (soft[i] > 200) { sum += 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]; n++; }
+      return { mask: soft, meanLum: n ? sum / n : 128, pixels: n };
+    }
+
+    // צביעת החולצה תוך שמירה על הצללים והקפלים
+    function tintedBase(hex) {
+      const ch = mk.char;
+      if (!hex) return ch.canvas;
+      if (ch.tinted[hex]) return ch.tinted[hex];
+      const cv = document.createElement('canvas');
+      cv.width = ch.canvas.width; cv.height = ch.canvas.height;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(ch.canvas, 0, 0);
+      const im = ctx.getImageData(0, 0, cv.width, cv.height), d = im.data;
+      const tr = parseInt(hex.slice(1, 3), 16), tg = parseInt(hex.slice(3, 5), 16), tb = parseInt(hex.slice(5, 7), 16);
+      const { mask, meanLum } = ch.shirt;
+      for (let i = 0; i < mask.length; i++) {
+        const m = mask[i] / 255;
+        if (!m) continue;
+        const p = i * 4;
+        const lum = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+        const f = Math.pow(lum / meanLum, 0.85);
+        d[p] = d[p] * (1 - m) + Math.min(255, tr * f) * m;
+        d[p + 1] = d[p + 1] * (1 - m) + Math.min(255, tg * f) * m;
+        d[p + 2] = d[p + 2] * (1 - m) + Math.min(255, tb * f) * m;
+      }
+      ctx.putImageData(im, 0, 0);
+      ch.tinted[hex] = cv;
+      return cv;
+    }
+
+    // ---------- טעינה ----------
+    async function initMikmak() {
+      const key = MIKMAK_CHARS[currentUser] ? currentUser : 'הלל';
+      if (mk.loading && mk.charKey === key) return mk.loading;
+      mk.charKey = key;
+      mk.state = JSON.parse(localStorage.getItem(`sh_mikmak_${currentUser}`) || 'null') || {
+        owned: [], equipped: { glasses: null, color: null, print: null, hair: null, hat: null, badge: 'badge-medal' }
+      };
+      mk.fits = JSON.parse(localStorage.getItem('sh_mikmak_fit') || '{}');
+      document.getElementById('avatar-user-title').innerText = `המיקמק של ${currentUser}`;
+      document.getElementById('coins-owner').innerText = currentUser;
+      document.getElementById('upload-cat').innerHTML = MIKMAK_CATS.filter(c => c.upload)
+        .map(c => `<option value="${c.id}">${c.label}</option>`).join('');
+      setupMikmakStage();
+      renderMikmakUI();
+
+      mk.loading = (async () => {
+        const cfg = MIKMAK_CHARS[key];
+        const base = cutStickerBackground(toCanvas(await loadImageEl(cfg.src)));
+        mk.char = { ...cfg, canvas: base, bbox: alphaBBox(base), tinted: {}, shirt: buildShirtMask(base, cfg.shirt) };
+
+        const builtins = await Promise.all(MIKMAK_BUILTIN.map(async it => {
+          const item = { ...it };
+          if (it.kind === 'image') {
+            let cv = toCanvas(await loadImageEl(it.src), it.crop, 900);
+            if (it.removeBg) cv = autoCrop(cutAutoBackground(cv));
+            item.canvas = cv;
+            analyzeMikmakItem(item);
+          }
+          return item;
+        }));
+        const custom = await loadCustomMikmakItems();
+        mk.items = [...builtins, ...custom];
+        mk.items.forEach(it => { it.thumb = mikmakThumb(it); });
+        mk.ready = true;
+        renderMikmakUI();
+      })().catch(err => {
+        console.error(err);
+        document.getElementById('mikmak-hint').innerText = 'לא הצלחתי לטעון את תמונות המיקמק 😕';
+      });
+      return mk.loading;
+    }
+
+    async function loadCustomMikmakItems() {
+      const list = (await getMediaFromDB('mikmak_items')) || [];
+      return Promise.all(list.map(async it => {
+        const canvas = toCanvas(await loadImageEl(await blobToDataURL(it.blob)));
+        return analyzeMikmakItem({ id: it.id, cat: it.cat, name: it.name, kind: 'image', frame: it.frame, custom: true, canvas });
+      }));
+    }
+
+    // data URI ולא blob URL: כך הקנבס נשאר קריא גם כשהאתר נפתח כקובץ מקומי
+    function blobToDataURL(blob) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+    }
+
+    async function uploadMikmakItem(e) {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      const cat = document.getElementById('upload-cat').value;
+      const nameEl = document.getElementById('upload-name');
+      const name = nameEl.value.trim() || file.name.replace(/\.[^.]+$/, '');
+      const removeBg = document.getElementById('upload-removebg').checked;
+
+      let cv = toCanvas(await loadImageEl(await blobToDataURL(file)), null, 900);
+      if (removeBg) cv = autoCrop(cutAutoBackground(cv));
+      const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+
+      const record = { id: `custom-${Date.now()}`, cat, name, blob, frame: !removeBg && cat === 'print' };
+      const list = (await getMediaFromDB('mikmak_items')) || [];
+      list.push(record);
+      await saveMediaToDB(list, 'mikmak_items');
+
+      const item = analyzeMikmakItem({ id: record.id, cat, name, kind: 'image', frame: record.frame, custom: true, canvas: cv });
+      item.thumb = mikmakThumb(item);
+      mk.items.push(item);
+      nameEl.value = '';
+      mk.cat = cat;
+      renderMikmakUI();
+    }
+
+    // פריט שהועלה נמחק לגמרי; פריט מובנה רק מוסתר מהחנות (ואפשר לשחזר)
+    async function deleteMikmakItem(id) {
+      const item = mk.items.find(it => it.id === id);
+      if (!item || !confirm(`להוריד את "${item.name}" מהחנות?`)) return;
+      if (item.custom) {
+        const list = ((await getMediaFromDB('mikmak_items')) || []).filter(it => it.id !== id);
+        await saveMediaToDB(list, 'mikmak_items');
+        mk.items = mk.items.filter(it => it.id !== id);
+      } else {
+        mk.hidden.push(id);
+        localStorage.setItem('sh_mikmak_hidden', JSON.stringify(mk.hidden));
+      }
+      Object.keys(mk.state.equipped).forEach(k => { if (mk.state.equipped[k] === id) mk.state.equipped[k] = null; });
+      saveMikmakState();
+      renderMikmakUI();
+    }
+
+    function restoreMikmakItems() {
+      mk.hidden = [];
+      localStorage.removeItem('sh_mikmak_hidden');
+      renderMikmakUI();
+    }
+
+    function toggleMikmakManage() {
+      mk.manage = !mk.manage;
+      renderMikmakUI();
+    }
+
+    function saveMikmakState() {
+      localStorage.setItem(`sh_mikmak_${currentUser}`, JSON.stringify(mk.state));
+    }
+
+    // ---------- ציור פריטים וקטוריים ----------
+    function drawGoldGlasses(ctx, w) {
+      const lw = w * 0.36, lh = w * 0.22, gap = w * 0.26, rr = lh * 0.35;
+      const lens = (cx) => {
+        const g = ctx.createLinearGradient(0, -lh / 2, 0, lh / 2);
+        g.addColorStop(0, '#fffbe0'); g.addColorStop(0.35, '#f7d154'); g.addColorStop(0.7, '#c89211'); g.addColorStop(1, '#fde68a');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.roundRect(cx - lw / 2, -lh / 2, lw, lh, [rr * 0.5, rr * 0.5, rr * 1.4, rr * 1.4]);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.beginPath();
+        ctx.ellipse(cx - lw * 0.18, -lh * 0.18, lw * 0.16, lh * 0.12, -0.4, 0, Math.PI * 2);
+        ctx.fill();
+      };
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = w * 0.045;
+      ctx.lineJoin = 'round';
+      lens(-gap);
+      lens(gap);
+      ctx.beginPath();
+      ctx.moveTo(-gap + lw / 2, -lh * 0.28);
+      ctx.quadraticCurveTo(0, -lh * 0.55, gap - lw / 2, -lh * 0.28);
+      ctx.moveTo(-gap - lw / 2, -lh * 0.35); ctx.lineTo(-gap - lw / 2 - w * 0.05, -lh * 0.4);
+      ctx.moveTo(gap + lw / 2, -lh * 0.35); ctx.lineTo(gap + lw / 2 + w * 0.05, -lh * 0.4);
+      ctx.stroke();
+    }
+
+    function drawShirtIcon(ctx, S, hex) {
+      ctx.fillStyle = hex || 'transparent';
+      ctx.strokeStyle = hex ? 'rgba(0,0,0,0.25)' : '#9ca3af';
+      ctx.lineWidth = 2;
+      if (!hex) ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(S * 0.36, S * 0.18); ctx.quadraticCurveTo(S * 0.5, S * 0.3, S * 0.64, S * 0.18);
+      ctx.lineTo(S * 0.88, S * 0.3); ctx.lineTo(S * 0.8, S * 0.46); ctx.lineTo(S * 0.72, S * 0.42);
+      ctx.lineTo(S * 0.72, S * 0.84); ctx.lineTo(S * 0.28, S * 0.84); ctx.lineTo(S * 0.28, S * 0.42);
+      ctx.lineTo(S * 0.2, S * 0.46); ctx.lineTo(S * 0.12, S * 0.3); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function mikmakThumb(item) {
+      const S = 96, cv = document.createElement('canvas');
+      cv.width = cv.height = S;
+      const ctx = cv.getContext('2d');
+      ctx.imageSmoothingQuality = 'high';
+      ctx.translate(S / 2, S / 2);
+      if (item.kind === 'color') { ctx.translate(-S / 2, -S / 2); drawShirtIcon(ctx, S, item.hex); }
+      else if (item.kind === 'emoji') { ctx.font = `${S * 0.62}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(item.emoji, 0, S * 0.04); }
+      else if (item.kind === 'vector') item.draw(ctx, S * 0.9);
+      else if (item.canvas) {
+        const k = Math.min((S * 0.86) / item.canvas.width, (S * 0.86) / item.canvas.height);
+        const w = item.canvas.width * k, h = item.canvas.height * k;
+        if (item.frame) { ctx.fillStyle = '#fff'; ctx.fillRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6); }
+        ctx.drawImage(item.canvas, -w / 2, -h / 2, w, h);
+      }
+      return cv.toDataURL();
+    }
+
+    // ---------- התאמה חכמה: ניתוח צורת הפריט ----------
+    // משקפיים: מוצאים את שתי העדשות (שני ה"גושים" הכבדים משני צידי הגשר) כדי ליישר אותן מול העיניים
+    function analyzeGlasses(cv) {
+      const w = cv.width, h = cv.height, d = cv.getContext('2d').getImageData(0, 0, w, h).data;
+      const on = (x, y) => d[(y * w + x) * 4 + 3] > 40;
+      const col = new Float32Array(w);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (on(x, y)) col[x]++;
+      // פרופיל מוחלק: העדשות הן שתי "גבעות" גבוהות, הידיות והגשר הם עמקים נמוכים
+      const rad = Math.max(1, Math.round(w * 0.03)), sm = new Float32Array(w);
+      for (let x = 0; x < w; x++) {
+        let s = 0, n = 0;
+        for (let k = Math.max(0, x - rad); k <= Math.min(w - 1, x + rad); k++) { s += col[k]; n++; }
+        sm[x] = s / n;
+      }
+      const order = [...sm.keys()].sort((a, b) => sm[b] - sm[a]);
+      const p1 = order[0];
+      // הפסגה השנייה: רחוקה מספיק מהראשונה ועם עמק אמיתי ביניהן
+      const p2 = order.find(x => {
+        if (Math.abs(x - p1) < w * 0.15) return false;
+        let valley = Infinity;
+        for (let k = Math.min(x, p1); k <= Math.max(x, p1); k++) valley = Math.min(valley, sm[k]);
+        return valley < Math.min(sm[x], sm[p1]) * 0.75;
+      });
+      if (p2 === undefined || !sm[p1]) return null;
+      const lens = (peak, lo, hi) => {
+        let a = peak, b = peak;
+        while (a > lo && sm[a - 1] >= sm[peak] * 0.45) a--;
+        while (b < hi && sm[b + 1] >= sm[peak] * 0.45) b++;
+        let sy = 0, n = 0;
+        for (let x = a; x <= b; x++) for (let y = 0; y < h; y++) if (on(x, y)) { sy += y; n++; }
+        return { x: (a + b) / 2, y: n ? sy / n : h / 2 };
+      };
+      const [pl, pr] = p1 < p2 ? [p1, p2] : [p2, p1];
+      let mid = pl;
+      for (let k = pl; k <= pr; k++) if (sm[k] < sm[mid]) mid = k;
+      return { l: lens(pl, 0, mid), r: lens(pr, mid, w - 1) };
+    }
+
+    // כובע: מוצאים את השוליים התחתונים הרחבים ביותר כדי שהכובע "ישב" על הראש ברוחב הנכון
+    function analyzeHat(cv) {
+      const w = cv.width, h = cv.height, d = cv.getContext('2d').getImageData(0, 0, w, h).data;
+      const rows = [];
+      let maxCount = 0;
+      for (let y = 0; y < h; y++) {
+        let first = -1, last = -1, count = 0;
+        for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 40) { if (first < 0) first = x; last = x; count++; }
+        rows.push({ first, last, count });
+        maxCount = Math.max(maxCount, count);
+      }
+      let yb = h - 1;
+      while (yb > 0 && rows[yb].count < maxCount * 0.15) yb--;
+      let best = null;
+      for (let y = Math.max(0, Math.floor(yb - h * 0.35)); y <= yb; y++) {
+        const r = rows[y];
+        if (r.count && (!best || r.last - r.first > best.w)) best = { x: (r.first + r.last) / 2, w: r.last - r.first + 1 };
+      }
+      return best && { x: best.x, y: yb, w: best.w };
+    }
+
+    function analyzeMikmakItem(item) {
+      if (!item.canvas) return item;
+      if (item.cat === 'glasses') item.shape = analyzeGlasses(item.canvas);
+      if (item.cat === 'hat') item.shape = analyzeHat(item.canvas);
+      return item;
+    }
+
+    // ---------- מיקום הפריטים על הדמות ----------
+    function mikmakPlacement(cat) {
+      const ch = mk.char;
+      const [a, b] = [...ch.eyes].sort((p, q) => p.x - q.x);
+      const eyeAngle = Math.atan2(b.y - a.y, b.x - a.x);
+      const eyeDist = Math.hypot(b.x - a.x, b.y - a.y);
+      if (cat === 'glasses') return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, w: eyeDist * 2.3, angle: eyeAngle, anchor: 'center' };
+      if (cat === 'hat') return { x: ch.headTop.x, y: ch.headTop.y + ch.headW * 0.3, w: ch.headW * 1.05, angle: eyeAngle, anchor: 'bottom' };
+      if (cat === 'hair') return { x: ch.headTop.x, y: ch.headTop.y - ch.headW * 0.1, w: ch.headW * 1.5, angle: eyeAngle, anchor: 'top' };
+      if (cat === 'print') return { x: ch.chest.x, y: ch.chest.y, w: ch.chest.w, angle: 0, anchor: 'center' };
+      if (cat === 'badge') return { x: ch.medal.x, y: ch.medal.y, w: ch.medal.r * 2.1, angle: 0, anchor: 'center' };
+      return null;
+    }
+
+    function mikmakFitKey(itemId) { return `${mk.charKey}:${itemId}`; }
+    function mikmakFit(item) {
+      return { s: 1, x: 0, y: 0, r: 0, ...(item.fit || {}), ...(mk.fits[mikmakFitKey(item.id)] || {}) };
+    }
+
+    function drawMikmakItem(ctx, item) {
+      const place = mikmakPlacement(item.cat);
+      if (!place) return;
+      const fit = mikmakFit(item);
+      const w = place.w * fit.s;
+      ctx.save();
+      ctx.translate(place.x + fit.x * place.w, place.y + fit.y * place.w);
+      ctx.rotate(place.angle + fit.r * Math.PI / 180);
+      if (item.kind === 'vector') {
+        // במשקפי הזהב המרחק בין מרכזי העדשות הוא 0.52 מהרוחב: מיישרים אותו למרחק בין העיניים
+        item.draw(ctx, item.cat === 'glasses' ? (place.w / 2.3) / 0.52 * fit.s : w);
+      } else if (item.cat === 'glasses' && item.shape) {
+        const { l, r } = item.shape;
+        const k = (place.w / 2.3) / Math.hypot(r.x - l.x, r.y - l.y) * fit.s;
+        ctx.scale(k, k);
+        ctx.rotate(-Math.atan2(r.y - l.y, r.x - l.x));
+        ctx.drawImage(item.canvas, -(l.x + r.x) / 2, -(l.y + r.y) / 2);
+      } else if (item.cat === 'hat' && item.shape) {
+        const k = w / item.shape.w;
+        ctx.scale(k, k);
+        ctx.drawImage(item.canvas, -item.shape.x, -item.shape.y);
+      } else if (item.kind === 'emoji') {
+        ctx.font = `${w * 0.72}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(item.emoji, 0, -w * 0.02);
+      } else if (item.canvas) {
+        let iw = w, h = w * item.canvas.height / item.canvas.width;
+        // הדפס גבוה במיוחד מוקטן כך שיישאר בתוך אזור החזה
+        if (item.cat === 'print' && h > w * 1.15) { h = w * 1.15; iw = h * item.canvas.width / item.canvas.height; }
+        const y0 = place.anchor === 'bottom' ? -h : place.anchor === 'top' ? 0 : -h / 2;
+        if (item.frame) {
+          ctx.save();
+          ctx.shadowColor = 'rgba(0,0,0,0.35)';
+          ctx.shadowBlur = w * 0.06;
+          ctx.shadowOffsetY = w * 0.02;
+          ctx.fillStyle = '#fff';
+          const p = w * 0.045;
+          ctx.fillRect(-iw / 2 - p, y0 - p, iw + p * 2, h + p * 2);
+          ctx.restore();
+        }
+        ctx.drawImage(item.canvas, -iw / 2, y0, iw, h);
+      }
+      ctx.restore();
+    }
+
+    // ---------- הבמה ----------
+    function setupMikmakStage() {
+      if (mk.stage) return;
+      mk.stage = document.getElementById('mikmak-stage');
+      mk.ctx = mk.stage.getContext('2d');
+      window.addEventListener('resize', () => { if (mk.ready) renderMikmakStage(); });
+
+      // גרירת הפריט שבכוונון ישירות על הדמות
+      mk.stage.addEventListener('pointerdown', (e) => {
+        const item = mikmakFitTarget();
+        if (!item) return;
+        mk.stage.setPointerCapture(e.pointerId);
+        mk.drag = { x: e.clientX, y: e.clientY };
+      });
+      mk.stage.addEventListener('pointermove', (e) => {
+        const item = mikmakFitTarget();
+        if (!mk.drag || !item) return;
+        const place = mikmakPlacement(item.cat);
+        const k = 1 / (mk.scale * place.w);
+        const fit = mikmakFit(item);
+        setMikmakFit('x', fit.x + (e.clientX - mk.drag.x) * k, false);
+        setMikmakFit('y', fit.y + (e.clientY - mk.drag.y) * k);
+        mk.drag = { x: e.clientX, y: e.clientY };
+      });
+      const end = () => { mk.drag = null; };
+      mk.stage.addEventListener('pointerup', end);
+      mk.stage.addEventListener('pointercancel', end);
+    }
+
+    function renderMikmakStage() {
+      if (!mk.ready) return;
+      const ch = mk.char, eq = mk.state.equipped;
+      // מסגרת התצוגה: הדמות + הסמל + קצת אוויר
+      const m = ch.medal, b = ch.bbox, pad = 14;
+      const x0 = Math.min(b.x, m.x - m.r * 1.15) - pad, y0 = Math.min(b.y, m.y - m.r * 1.8, ch.headTop.y - ch.headW * 0.9) - pad;
+      const x1 = Math.max(b.x + b.w, m.x + m.r * 1.15) + pad, y1 = Math.max(b.y + b.h, m.y + m.r * 1.8) + pad;
+      mk.vb = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+
+      const parentW = mk.stage.parentElement.clientWidth || 340;
+      const cssW = Math.min(parentW, 420), cssH = cssW * mk.vb.h / mk.vb.w;
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      mk.stage.style.width = cssW + 'px';
+      mk.stage.style.height = cssH + 'px';
+      mk.stage.width = Math.round(cssW * dpr);
+      mk.stage.height = Math.round(cssH * dpr);
+      mk.scale = cssW / mk.vb.w;
+      const ctx = mk.ctx, k = mk.scale * dpr;
+      ctx.setTransform(k, 0, 0, k, -mk.vb.x * k, -mk.vb.y * k);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.clearRect(mk.vb.x, mk.vb.y, mk.vb.w, mk.vb.h);
+
+      const find = (id) => mk.items.find(it => it.id === id);
+      const color = find(eq.color);
+      ctx.drawImage(tintedBase(color && color.hex), 0, 0);
+      ['print', 'hair', 'glasses', 'hat', 'badge'].forEach(cat => {
+        const it = find(eq[cat]);
+        if (it) drawMikmakItem(ctx, it);
+      });
+    }
+
+    // ---------- הארון / החנות ----------
+    function mikmakOwns(item) {
+      return item.free || mk.state.owned.includes(item.id);
+    }
+
+    function mikmakFitTarget() {
+      if (!mk.ready || ['color'].includes(mk.cat)) return null;
+      return mk.items.find(it => it.id === mk.state.equipped[mk.cat]) || null;
+    }
+
+    function renderMikmakUI() {
+      const coins = getCoins();
+      document.getElementById('coins-count').innerText = coins;
+      document.getElementById('mikmak-cats').innerHTML = MIKMAK_CATS.map(c => `
+        <button onclick="mk.cat='${c.id}'; renderMikmakUI()" class="px-3 py-1.5 rounded-xl text-xs font-bold transition ${mk.cat === c.id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}">${c.label}</button>
+      `).join('');
+      const catInfo = MIKMAK_CATS.find(c => c.id === mk.cat);
+      document.getElementById('mikmak-upload').classList.toggle('hidden', !catInfo.upload);
+      if (catInfo.upload) document.getElementById('upload-cat').value = mk.cat;
+
+      const grid = document.getElementById('mikmak-items');
+      if (!mk.ready) {
+        grid.innerHTML = `<div class="col-span-full text-center text-xs text-gray-400 py-6">טוען את הארון... 🧺</div>`;
+        return;
+      }
+      const items = mk.items.filter(it => it.cat === mk.cat && !mk.hidden.includes(it.id));
+      const manageBtn = document.getElementById('mikmak-manage-btn');
+      manageBtn.innerText = mk.manage ? '✓ סיום' : '🗑 הורדת פריטים';
+      manageBtn.classList.toggle('text-rose-500', mk.manage);
+      document.getElementById('mikmak-restore-btn').classList.toggle('hidden', !mk.hidden.length);
+      grid.innerHTML = items.length ? items.map(it => {
+        const owned = mikmakOwns(it);
+        const worn = mk.state.equipped[it.cat] === it.id || (it.id === 'color-original' && !mk.state.equipped.color);
+        let btn;
+        if (worn) btn = `<span class="text-emerald-600">✓ לבוש</span>`;
+        else if (owned) btn = `<span class="text-gray-700">ללבוש</span>`;
+        else if (coins >= MIKMAK_PRICE) btn = `<span class="text-amber-700">💰 ${MIKMAK_PRICE}</span>`;
+        else btn = `<span class="text-gray-400">🔒 ${MIKMAK_PRICE}</span>`;
+        return `
+          <div class="relative group">
+            <button onclick="clickMikmakItem('${it.id}')" class="w-full p-2 rounded-2xl border text-center transition ${worn ? 'border-rose-400 bg-rose-50/60 ring-2 ring-rose-200' : 'border-gray-200 hover:border-rose-300 bg-white'}">
+              <img src="${it.thumb}" alt="" class="w-14 h-14 mx-auto object-contain ${owned ? '' : 'opacity-60'}">
+              <div class="text-[11px] font-bold text-gray-700 truncate mt-1">${escapeHtml(it.name)}</div>
+              <div class="text-[11px] font-black mt-0.5">${btn}</div>
+            </button>
+            ${mk.manage && !MIKMAK_LOCKED.includes(it.id) ? `<button onclick="deleteMikmakItem('${it.id}')" class="absolute -top-1.5 -left-1.5 w-6 h-6 rounded-full bg-rose-500 hover:bg-rose-600 text-white text-xs font-black shadow">✕</button>` : ''}
+          </div>`;
+      }).join('') : `<div class="col-span-full text-center text-xs text-gray-400 py-6">עוד אין פריטים בקטגוריה הזאת. העלו אחד למטה 👇</div>`;
+
+      // פאנל הכוונון
+      const target = mikmakFitTarget();
+      document.getElementById('mikmak-fit').classList.toggle('hidden', !target);
+      if (target) {
+        const f = mikmakFit(target);
+        document.getElementById('mikmak-fit-name').innerText = target.name;
+        document.getElementById('fit-s').value = f.s;
+        document.getElementById('fit-x').value = f.x;
+        document.getElementById('fit-y').value = -f.y;
+        document.getElementById('fit-r').value = f.r;
+      }
+      mk.stage.classList.toggle('cursor-move', !!target);
+      renderMikmakStage();
+    }
+
+    function clickMikmakItem(id) {
+      const it = mk.items.find(i => i.id === id);
+      if (!it) return;
+      const eq = mk.state.equipped;
+      if (it.id === 'color-original') { eq.color = null; }
+      else if (eq[it.cat] === it.id) { eq[it.cat] = null; }             // הסרה
+      else if (mikmakOwns(it)) { eq[it.cat] = it.id; }                  // לבישה
+      else {
+        const coins = getCoins();
+        if (coins < MIKMAK_PRICE) {
+          alert(`חסרים ${MIKMAK_PRICE - coins} מטבעות. לכו לאכול כמה רוחות ב-Pac Man 👻`);
+          return;
+        }
+        if (!confirm(`לקנות "${it.name}" ב-${MIKMAK_PRICE} מטבעות?`)) return;
+        localStorage.setItem(`sh_coins_${currentUser}`, coins - MIKMAK_PRICE);
+        mk.state.owned.push(it.id);
+        eq[it.cat] = it.id;
+        confetti({ particleCount: 70, spread: 70, zIndex: 900 });
+      }
+      saveMikmakState();
+      renderMikmakUI();
+    }
+
+    function setMikmakFit(key, value, rerender = true) {
+      const item = mikmakFitTarget();
+      if (!item) return;
+      const k = mikmakFitKey(item.id);
+      const f = { ...mikmakFit(item), [key]: parseFloat(value) };
+      f.s = Math.min(2.5, Math.max(0.3, f.s));
+      f.x = Math.min(0.6, Math.max(-0.6, f.x));
+      f.y = Math.min(0.6, Math.max(-0.6, f.y));
+      mk.fits[k] = f;
+      localStorage.setItem('sh_mikmak_fit', JSON.stringify(mk.fits));
+      if (rerender) {
+        document.getElementById('fit-s').value = f.s;
+        document.getElementById('fit-x').value = f.x;
+        document.getElementById('fit-y').value = -f.y;
+        document.getElementById('fit-r').value = f.r;
+        renderMikmakStage();
+      }
+    }
+
+    function resetMikmakFit() {
+      const item = mikmakFitTarget();
+      if (!item) return;
+      delete mk.fits[mikmakFitKey(item.id)];
+      localStorage.setItem('sh_mikmak_fit', JSON.stringify(mk.fits));
+      renderMikmakUI();
+    }
+
+    function downloadMikmak() {
+      if (!mk.ready) return;
+      const a = document.createElement('a');
+      a.download = `מיקמק-${currentUser}.png`;
+      a.href = mk.stage.toDataURL('image/png');
+      a.click();
+    }
+
+    let tasks = JSON.parse(localStorage.getItem('sh_tasks') || JSON.stringify([
+      { id: 1, text: "לומר מילה טובה לשירה / הלל", reward: 50, done: false },
+      { id: 2, text: "לפתוח נושא שיחה חדש שמעניין את שנינו", reward: 30, done: false },
+      { id: 3, text: "לחבר שידוך מוצלח ברחבת השידוכים", reward: 70, done: false }
+    ]));
+
+    function renderTasks() {
+      const container = document.getElementById('tasks-list');
+      container.innerHTML = tasks.map(t => `
+        <div class="flex items-center justify-between p-3 border border-gray-100 rounded-2xl ${t.done ? 'bg-gray-50 opacity-60' : 'bg-white'}">
+          <div class="flex items-center gap-2">
+            <input type="checkbox" ${t.done ? 'checked disabled' : ''} onchange="completeTask(${t.id})" class="rounded text-rose-500 focus:ring-rose-300 w-4 h-4 cursor-pointer">
+            <span class="text-xs font-semibold ${t.done ? 'line-through text-gray-400' : 'text-gray-700'}">${t.text}</span>
+          </div>
+          <span class="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">+${t.reward} 💰</span>
+        </div>
+      `).join('');
+    }
+
+    function completeTask(id) {
+      const t = tasks.find(item => item.id === id);
+      if (t && !t.done) {
+        t.done = true;
+        localStorage.setItem('sh_tasks', JSON.stringify(tasks));
+        addCoins(t.reward);
+        confetti({ particleCount: 40, spread: 40, zIndex: 900 });
+        renderTasks();
+      }
+    }
+
+    // ================= גלריית תמונות נעות (Hover to Play) =================
+    async function uploadGalleryMedia(e) {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+      const db = await openDB();
+
+      for (const file of files) {
+        const item = {
+          id: Date.now() + Math.random(),
+          type: file.type,
+          file: file,
+          date: new Date().toLocaleDateString('he-IL')
+        };
+        const tx = db.transaction('gallery', 'readwrite');
+        tx.objectStore('gallery').put(item);
+        await new Promise(res => tx.oncomplete = res);
+      }
+      loadGalleryFromDB();
+    }
+
+    async function loadGalleryFromDB() {
+      const db = await openDB();
+      const tx = db.transaction('gallery', 'readonly');
+      const req = tx.objectStore('gallery').getAll();
+      req.onsuccess = () => {
+        renderGallery(req.result || []);
+      };
+    }
+
+    function renderGallery(items) {
+      const grid = document.getElementById('gallery-grid');
+      if (!items.length) {
+        grid.innerHTML = `<div class="col-span-full text-center py-8 text-xs text-gray-400">עוד לא הועלו תמונות או סרטונים נעים</div>`;
+        return;
+      }
+
+      grid.innerHTML = items.reverse().map(item => {
+        const url = URL.createObjectURL(item.file);
+        const isVideo = item.type.startsWith('video/');
+
+        if (isVideo) {
+          return `
+            <div class="relative group aspect-square rounded-3xl overflow-hidden shadow-xs border border-gray-100 bg-black cursor-pointer"
+                 onmouseenter="playLiveVideo(this)"
+                 onmouseleave="pauseLiveVideo(this)"
+                 onclick="toggleLiveVideo(this)">
+              <video src="${url}" muted loop playsinline preload="metadata" class="w-full h-full object-cover pointer-events-none opacity-90 group-hover:opacity-100 transition"></video>
+              
+              <!-- תגית LIVE מעוצבת -->
+              <span class="absolute bottom-2.5 right-2.5 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 backdrop-blur-xs select-none">
+                <span class="text-rose-400">▶</span> LIVE
+              </span>
+
+              <button onclick="event.stopPropagation(); deleteGalleryItem(${item.id})" class="absolute top-2.5 left-2.5 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs">✕</button>
+            </div>
+          `;
+        } else {
+          return `
+            <div class="relative group aspect-square rounded-3xl overflow-hidden shadow-xs border border-gray-100 bg-gray-50">
+              <img src="${url}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+              <button onclick="deleteGalleryItem(${item.id})" class="absolute top-2.5 left-2.5 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs">✕</button>
+            </div>
+          `;
+        }
+      }).join('');
+    }
+
+    // הפעלה ועצירה של התמונות הנעות בריחוף
+    function playLiveVideo(container) {
+      const vid = container.querySelector('video');
+      if (vid) vid.play().catch(()=>{});
+    }
+
+    function pauseLiveVideo(container) {
+      const vid = container.querySelector('video');
+      if (vid) {
+        vid.pause();
+        vid.currentTime = 0;
+      }
+    }
+
+    function toggleLiveVideo(container) {
+      const vid = container.querySelector('video');
+      if (vid) {
+        if (vid.paused) vid.play();
+        else vid.pause();
+      }
+    }
+
+    async function deleteGalleryItem(id) {
+      const db = await openDB();
+      const tx = db.transaction('gallery', 'readwrite');
+      tx.objectStore('gallery').delete(id);
+      tx.oncomplete = () => loadGalleryFromDB();
+    }
+
+    // ================= הלל Pac Man (פאק-מן עם הסרטון של הלל) =================
+    // מקרא: # קיר, . נקודה, o גלולת כוח, - דלת בית הרוחות, G בית הרוחות, P נקודת התחלה, רווח = מעבר ריק
+    const PM_MAP = [
+      "###################",
+      "#........#........#",
+      "#o##.###.#.###.##o#",
+      "#.................#",
+      "#.##.#.#####.#.##.#",
+      "#....#...#...#....#",
+      "####.### # ###.####",
+      "   #.#       #.#   ",
+      "####.# ##-## #.####",
+      "    .  #GGG#  .    ",
+      "####.# ##### #.####",
+      "   #.#       #.#   ",
+      "####.# ##### #.####",
+      "#........#........#",
+      "#.##.###.#.###.##.#",
+      "#o.#.....P.....#.o#",
+      "##.#.#.#####.#.#.##",
+      "#....#...#...#....#",
+      "#.######.#.######.#",
+      "#.................#",
+      "###################"
+    ];
+    const PM_COLS = PM_MAP[0].length, PM_ROWS = PM_MAP.length;
+    const PM_DIRS = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+    const PM_OPP = { up: 'down', down: 'up', left: 'right', right: 'left' };
+    const PM_DOOR = { x: 9, y: 7 };      // המשבצת שמעל דלת בית הרוחות
+    const PM_HOUSE_Y = 9;
+    const PM_GHOSTS = [
+      { name: 'blinky', color: '#ef4444', x: 9,  y: 7, release: 0,   corner: { x: 18, y: -2 } },
+      { name: 'pinky',  color: '#f472b6', x: 9,  y: 9, release: 0.6, corner: { x: 0,  y: -2 } },
+      { name: 'inky',   color: '#22d3ee', x: 8,  y: 9, release: 3,   corner: { x: 18, y: 22 } },
+      { name: 'clyde',  color: '#fb923c', x: 10, y: 9, release: 6,   corner: { x: 0,  y: 22 } }
+    ];
+    const PM_MODE_CYCLE = [7, 20, 7, 20, 5, Infinity]; // פיזור / רדיפה לסירוגין
+
+    const pm = {
+      ready: false, canvas: null, ctx: null, T: 24, dpr: 1, mazeLayer: null,
+      state: 'idle', stateTimer: 0, score: 0, lives: 3, level: 1, high: 0,
+      dots: [], dotsLeft: 0, pac: null, ghosts: [], frightTimer: 0, ghostCombo: 0,
+      modeIndex: 0, modeTimer: 0, scatter: true, popups: [], lastTime: 0, time: 0,
+      video: null, image: null, mediaKind: 'video', mediaOk: false
+    };
+
+    function pmTile(c, r) {
+      if (r < 0 || r >= PM_ROWS) return '#';
+      c = ((c % PM_COLS) + PM_COLS) % PM_COLS;
+      return PM_MAP[r][c];
+    }
+    const pmIsWall = (c, r) => pmTile(c, r) === '#';
+    const pmPacCanEnter = (c, r) => !'#-G'.includes(pmTile(c, r));
+    const pmGhostCanEnter = (c, r) => !'#-'.includes(pmTile(c, r));
+
+    function initPacman() {
+      if (pm.ready) return;
+      pm.ready = true;
+      pm.canvas = document.getElementById('pacman-canvas');
+      pm.ctx = pm.canvas.getContext('2d');
+      pm.video = document.getElementById('pacman-video');
+      pm.image = document.getElementById('pacman-image');
+      pm.high = parseInt(localStorage.getItem(`sh_pacman_high_${currentUser}`) || '0');
+      document.getElementById('pm-high-label').innerText = `השיא של ${currentUser}`;
+
+      pm.video.addEventListener('loadeddata', () => { if (pm.mediaKind === 'video') pm.mediaOk = true; });
+      pm.video.addEventListener('error', () => { if (pm.mediaKind === 'video') pm.mediaOk = false; });
+      if (pm.video.readyState >= 2) pm.mediaOk = true;
+      loadPacmanMedia();
+
+      setupPacmanInput();
+      window.addEventListener('resize', resizePacman);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) pausePacman(); });
+
+      resetPacmanBoard(true);
+      resizePacman();
+      updatePacmanHud();
+      requestAnimationFrame(pacmanLoop);
+    }
+
+    async function loadPacmanMedia() {
+      const media = await getMediaFromDB('pacman_media');
+      if (!media) return;
+      const url = URL.createObjectURL(media);
+      if (media.type.startsWith('video/')) {
+        pm.mediaKind = 'video';
+        pm.mediaOk = false;
+        pm.video.src = url;
+        pm.video.load();
+      } else {
+        pm.mediaKind = 'image';
+        pm.mediaOk = false;
+        pm.image.onload = () => { pm.mediaOk = true; };
+        pm.image.src = url;
+      }
+    }
+
+    async function handlePacmanMediaUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      await saveMediaToDB(file, 'pacman_media');
+      await loadPacmanMedia();
+      e.target.value = '';
+      resetPacmanCrop();
+      togglePacmanEditor(true); // סרטון חדש? ישר מכוונים אותו בעיגול
+    }
+
+    function resizePacman() {
+      if (!pm.ready) return;
+      const wrap = pm.canvas.parentElement;
+      const avail = (wrap.clientWidth || 520) - 16;
+      pm.T = Math.max(12, Math.min(27, Math.floor(avail / PM_COLS)));
+      pm.dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const w = PM_COLS * pm.T, h = PM_ROWS * pm.T;
+      pm.canvas.style.width = w + 'px';
+      pm.canvas.style.height = h + 'px';
+      pm.canvas.width = Math.round(w * pm.dpr);
+      pm.canvas.height = Math.round(h * pm.dpr);
+      pm.ctx.setTransform(pm.dpr, 0, 0, pm.dpr, 0, 0);
+      pm.ctx.imageSmoothingEnabled = true;
+      pm.ctx.imageSmoothingQuality = 'high';
+      buildPacmanMaze();
+      drawPacman();
+    }
+
+    // הקירות מצוירים פעם אחת לשכבה נפרדת: צינורות ניאון כחולים
+    function buildPacmanMaze() {
+      const T = pm.T, layer = document.createElement('canvas');
+      layer.width = pm.canvas.width;
+      layer.height = pm.canvas.height;
+      const g = layer.getContext('2d');
+      g.setTransform(pm.dpr, 0, 0, pm.dpr, 0, 0);
+
+      const pipes = (color, thick, glow) => {
+        g.save();
+        g.fillStyle = color;
+        if (glow) { g.shadowColor = '#60a5fa'; g.shadowBlur = glow; }
+        g.beginPath();
+        const h = thick * T / 2;
+        for (let r = 0; r < PM_ROWS; r++) {
+          for (let c = 0; c < PM_COLS; c++) {
+            if (PM_MAP[r][c] !== '#') continue;
+            const x = c * T + T / 2, y = r * T + T / 2;
+            g.moveTo(x + h, y);
+            g.arc(x, y, h, 0, Math.PI * 2);
+            if (c + 1 < PM_COLS && PM_MAP[r][c + 1] === '#') g.rect(x, y - h, T, h * 2);
+            if (r + 1 < PM_ROWS && PM_MAP[r + 1][c] === '#') g.rect(x - h, y, h * 2, T);
+          }
+        }
+        g.fill();
+        g.restore();
+      };
+      pipes('#2563eb', 0.62, T * 0.5);
+      pipes('#0b0f2a', 0.3, 0);
+
+      // דלת בית הרוחות
+      g.fillStyle = '#f9a8d4';
+      g.fillRect(9 * T + T * 0.1, 8 * T + T * 0.42, T * 0.8, T * 0.16);
+      pm.mazeLayer = layer;
+    }
+
+    function resetPacmanBoard(refillDots) {
+      if (refillDots) {
+        // ממלאים נקודות רק במשבצות שאפשר באמת להגיע אליהן
+        const start = { x: 9, y: 15 };
+        const seen = new Set([`${start.x},${start.y}`]);
+        const queue = [start];
+        while (queue.length) {
+          const { x, y } = queue.shift();
+          for (const d of Object.values(PM_DIRS)) {
+            const nx = (x + d.x + PM_COLS) % PM_COLS, ny = y + d.y;
+            const k = `${nx},${ny}`;
+            if (!seen.has(k) && pmPacCanEnter(nx, ny)) { seen.add(k); queue.push({ x: nx, y: ny }); }
+          }
+        }
+        pm.dots = PM_MAP.map((row, r) => [...row].map((ch, c) => {
+          if (!seen.has(`${c},${r}`)) return 0;
+          return ch === '.' ? 1 : ch === 'o' ? 2 : 0;
+        }));
+        pm.dotsLeft = pm.dots.flat().filter(Boolean).length;
+      }
+      const speedUp = 1 + Math.min(pm.level - 1, 6) * 0.06;
+      pm.pac = { x: 9, y: 15, dir: 'left', nextDir: 'left', speed: 7.2 * speedUp, moving: false, facing: 1 };
+      pm.ghosts = PM_GHOSTS.map(g => ({
+        ...g, x: g.x, y: g.y,
+        dir: 'left',
+        mode: g.release === 0 ? 'active' : 'house',
+        releaseTimer: g.release / speedUp,
+        frightened: false,
+        speed: 6.6 * speedUp
+      }));
+      pm.frightTimer = 0;
+      pm.modeIndex = 0;
+      pm.modeTimer = PM_MODE_CYCLE[0];
+      pm.scatter = true;
+      pm.popups = [];
+    }
+
+    function newPacmanGame() {
+      pm.score = 0;
+      pm.coinsEarned = 0;
+      pm.lives = 3;
+      pm.level = 1;
+      resetPacmanBoard(true);
+      setPacmanState('ready', 1.6);
+      updatePacmanHud();
+    }
+
+    function setPacmanState(state, timer = 0) {
+      pm.state = state;
+      pm.stateTimer = timer;
+      const overlay = document.getElementById('pm-overlay');
+      const title = document.getElementById('pm-overlay-title');
+      const sub = document.getElementById('pm-overlay-sub');
+      const btn = document.getElementById('pm-overlay-btn');
+      const pauseBtn = document.getElementById('pm-pause-btn');
+      pauseBtn.innerText = state === 'paused' ? '▶ המשך' : '⏸ השהיה';
+
+      if (state === 'paused') {
+        title.innerText = 'הפסקת לעיסה ⏸';
+        sub.innerText = 'הלל מחכה עם הפה פתוח...';
+        btn.innerText = '▶ המשך';
+        overlay.classList.remove('hidden');
+      } else if (state === 'gameover') {
+        const isRecord = pm.score > 0 && pm.score >= pm.high;
+        title.innerText = isRecord ? 'שיא חדש! 🏆' : 'רוח רפאים תפסה את הלל 👻';
+        sub.innerText = (isRecord
+          ? `${pm.score} נקודות. הלל בלס יותר מאי פעם!`
+          : `${pm.score} נקודות. הלל עדיין רעב...`) +
+          (pm.coinsEarned ? `\n💰 הרווחת ${pm.coinsEarned} מטבעות למיקמק!` : '');
+        btn.innerText = '🔄 עוד סיבוב';
+        overlay.classList.remove('hidden');
+      } else if (state === 'idle') {
+        overlay.classList.remove('hidden');
+      } else {
+        overlay.classList.add('hidden');
+      }
+    }
+
+    function pacmanPrimaryAction() {
+      if (pm.state === 'idle' || pm.state === 'gameover') newPacmanGame();
+      else if (pm.state === 'paused') setPacmanState(pm.resumeState || 'playing', pm.resumeTimer || 0);
+    }
+
+    function pausePacman() {
+      if (!pm.ready || !['playing', 'ready'].includes(pm.state)) return;
+      pm.resumeState = pm.state;
+      pm.resumeTimer = pm.stateTimer;
+      setPacmanState('paused');
+    }
+
+    function togglePacmanPause() {
+      if (pm.state === 'paused') pacmanPrimaryAction();
+      else pausePacman();
+    }
+
+    function updatePacmanHud() {
+      document.getElementById('pm-score').innerText = pm.score;
+      document.getElementById('pm-level').innerText = pm.level;
+      document.getElementById('pm-lives').innerText = '💛'.repeat(Math.max(pm.lives, 0));
+      document.getElementById('pm-high').innerText = pm.high;
+    }
+
+    // ---------- קלט: מקלדת, החלקה וכפתורים ----------
+    function setupPacmanInput() {
+      const keyMap = {
+        ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+        w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right'
+      };
+      document.addEventListener('keydown', (e) => {
+        if (document.getElementById('section-pacman').classList.contains('hidden')) return;
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+        if (keyMap[e.key]) {
+          e.preventDefault();
+          pacmanSteer(keyMap[e.key]);
+        } else if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          if (['playing', 'ready'].includes(pm.state)) pausePacman();
+          else pacmanPrimaryAction();
+        } else if (e.key === 'p' || e.key === 'P') {
+          togglePacmanPause();
+        }
+      });
+
+      let touchStart = null;
+      pm.canvas.addEventListener('touchstart', (e) => {
+        const t = e.touches[0];
+        touchStart = { x: t.clientX, y: t.clientY };
+      }, { passive: true });
+      pm.canvas.addEventListener('touchmove', (e) => {
+        if (!touchStart) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        const dx = t.clientX - touchStart.x, dy = t.clientY - touchStart.y;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) return;
+        pacmanSteer(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+        touchStart = { x: t.clientX, y: t.clientY };
+      }, { passive: false });
+      pm.canvas.addEventListener('touchend', () => { touchStart = null; });
+
+      document.querySelectorAll('.pm-pad').forEach(btn => {
+        btn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          pacmanSteer(btn.dataset.dir);
+        });
+      });
+    }
+
+    function pacmanSteer(dir) {
+      if (pm.state === 'idle' || pm.state === 'gameover') { newPacmanGame(); }
+      pm.pac.nextDir = dir;
+      if (pm.pac.dir === PM_OPP[dir]) pm.pac.dir = dir; // אפשר להסתובב לאחור בכל רגע
+    }
+
+    // ---------- תנועה על הרשת ----------
+    // מזיז דמות dist משבצות; במרכז כל משבצת chooseDir מחליט לאן להמשיך
+    function pmStep(e, dist, canEnter, chooseDir) {
+      let moved = false;
+      let guard = 0;
+      while (dist > 1e-6 && guard++ < 10) {
+        const cx = Math.round(e.x), cy = Math.round(e.y);
+        const atCenter = Math.abs(e.x - cx) < 1e-6 && Math.abs(e.y - cy) < 1e-6;
+        if (atCenter) {
+          e.x = cx; e.y = cy;
+          chooseDir(e, cx, cy);
+          if (!e.dir) break;
+          const d = PM_DIRS[e.dir];
+          if (!canEnter(cx + d.x, cy + d.y)) break;
+        }
+        const d = PM_DIRS[e.dir];
+        const tx = atCenter ? cx + d.x : d.x > 0 ? Math.ceil(e.x) : d.x < 0 ? Math.floor(e.x) : e.x;
+        const ty = atCenter ? cy + d.y : d.y > 0 ? Math.ceil(e.y) : d.y < 0 ? Math.floor(e.y) : e.y;
+        const remaining = Math.abs(tx - e.x) + Math.abs(ty - e.y);
+        const m = Math.min(dist, remaining);
+        e.x += d.x * m;
+        e.y += d.y * m;
+        dist -= m;
+        moved = true;
+        if (m >= remaining - 1e-9) {
+          e.x = tx; e.y = ty;
+          if (e.x < 0) e.x += PM_COLS;          // מנהרה
+          if (e.x >= PM_COLS) e.x -= PM_COLS;
+        }
+      }
+      return moved;
+    }
+
+    function pacChooseDir(p, cx, cy) {
+      const nd = PM_DIRS[p.nextDir];
+      if (p.nextDir && pmPacCanEnter(cx + nd.x, cy + nd.y)) p.dir = p.nextDir;
+    }
+
+    function ghostTarget(g) {
+      const p = pm.pac, pd = PM_DIRS[p.dir] || { x: 0, y: 0 };
+      if (g.mode === 'eaten') return PM_DOOR;
+      if (pm.scatter) return g.corner;
+      const px = Math.round(p.x), py = Math.round(p.y);
+      if (g.name === 'pinky') return { x: px + pd.x * 4, y: py + pd.y * 4 };
+      if (g.name === 'inky') {
+        const b = pm.ghosts[0];
+        const ax = px + pd.x * 2, ay = py + pd.y * 2;
+        return { x: ax * 2 - Math.round(b.x), y: ay * 2 - Math.round(b.y) };
+      }
+      if (g.name === 'clyde' && Math.hypot(g.x - px, g.y - py) < 6) return g.corner;
+      return { x: px, y: py };
+    }
+
+    function ghostChooseDir(g, cx, cy) {
+      if (g.mode === 'eaten' && cx === PM_DOOR.x && cy === PM_DOOR.y) {
+        g.mode = 'entering';
+        g.dir = null;
+        return;
+      }
+      let options = ['up', 'left', 'down', 'right'].filter(d =>
+        d !== PM_OPP[g.dir] && pmGhostCanEnter(cx + PM_DIRS[d].x, cy + PM_DIRS[d].y));
+      if (!options.length) options = [PM_OPP[g.dir]];
+      if (g.frightened && g.mode === 'active') {
+        g.dir = options[Math.floor(Math.random() * options.length)];
+        return;
+      }
+      const t = ghostTarget(g);
+      let best = options[0], bestDist = Infinity;
+      for (const d of options) {
+        const dist = (cx + PM_DIRS[d].x - t.x) ** 2 + (cy + PM_DIRS[d].y - t.y) ** 2;
+        if (dist < bestDist) { bestDist = dist; best = d; }
+      }
+      g.dir = best;
+    }
+
+    // תנועה ישרה בתוך בית הרוחות (יציאה / כניסה)
+    function moveToward(g, tx, ty, dist) {
+      if (g.x !== tx) {
+        const s = Math.sign(tx - g.x);
+        g.x = Math.abs(tx - g.x) <= dist ? tx : g.x + s * dist;
+        g.dir = s > 0 ? 'right' : 'left';
+        return false;
+      }
+      if (g.y !== ty) {
+        const s = Math.sign(ty - g.y);
+        g.y = Math.abs(ty - g.y) <= dist ? ty : g.y + s * dist;
+        g.dir = s > 0 ? 'down' : 'up';
+        return false;
+      }
+      return true;
+    }
+
+    function updatePacmanGhost(g, dt) {
+      if (g.mode === 'house') {
+        g.releaseTimer -= dt;
+        if (g.releaseTimer <= 0) g.mode = 'leaving';
+        return;
+      }
+      if (g.mode === 'leaving') {
+        if (moveToward(g, PM_DOOR.x, PM_DOOR.y, 3.5 * dt)) { g.mode = 'active'; g.dir = 'left'; }
+        return;
+      }
+      if (g.mode === 'entering') {
+        if (moveToward(g, PM_DOOR.x, PM_HOUSE_Y, 8 * dt)) { g.mode = 'leaving'; g.frightened = false; }
+        return;
+      }
+      let speed = g.speed;
+      if (g.mode === 'eaten') speed = 15;
+      else if (g.frightened) speed = 4;
+      if (Math.round(g.y) === 9 && (g.x < 4 || g.x > 14)) speed *= 0.55; // האטה במנהרה
+      pmStep(g, speed * dt, (c, r) => pmGhostCanEnter(c, r), ghostChooseDir);
+    }
+
+    function pacmanEatAt(x, y) {
+      const c = ((Math.round(x) % PM_COLS) + PM_COLS) % PM_COLS, r = Math.round(y);
+      const v = pm.dots[r] && pm.dots[r][c];
+      if (!v) return;
+      pm.dots[r][c] = 0;
+      pm.dotsLeft--;
+      if (v === 1) pm.score += 10;
+      else {
+        pm.score += 50;
+        pm.frightTimer = Math.max(2.5, 7 - (pm.level - 1) * 0.8);
+        pm.ghostCombo = 0;
+        pm.ghosts.forEach(g => {
+          if (g.mode === 'eaten' || g.mode === 'entering') return;
+          if (!g.frightened && g.mode === 'active' && g.dir) g.dir = PM_OPP[g.dir];
+          g.frightened = true;
+        });
+      }
+      updatePacmanHud();
+      if (pm.dotsLeft <= 0) {
+        setPacmanState('levelclear', 2.4);
+        confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 }, zIndex: 900 });
+      }
+    }
+
+    function updatePacman(dt) {
+      pm.time += dt;
+      pm.popups.forEach(p => p.t -= dt);
+      pm.popups = pm.popups.filter(p => p.t > 0);
+
+      if (pm.state === 'ready') {
+        pm.stateTimer -= dt;
+        if (pm.stateTimer <= 0) setPacmanState('playing');
+        return;
+      }
+      if (pm.state === 'dying') {
+        pm.stateTimer -= dt;
+        if (pm.stateTimer <= 0) {
+          pm.lives--;
+          updatePacmanHud();
+          if (pm.lives <= 0) finishPacmanGame();
+          else { resetPacmanBoard(false); setPacmanState('ready', 1.4); }
+        }
+        return;
+      }
+      if (pm.state === 'levelclear') {
+        pm.stateTimer -= dt;
+        if (pm.stateTimer <= 0) {
+          pm.level++;
+          resetPacmanBoard(true);
+          updatePacmanHud();
+          setPacmanState('ready', 1.4);
+        }
+        return;
+      }
+      if (pm.state !== 'playing') return;
+
+      // מחזור פיזור / רדיפה
+      if (pm.frightTimer > 0) {
+        pm.frightTimer -= dt;
+        if (pm.frightTimer <= 0) pm.ghosts.forEach(g => g.frightened = false);
+      } else {
+        pm.modeTimer -= dt;
+        if (pm.modeTimer <= 0) {
+          pm.modeIndex = Math.min(pm.modeIndex + 1, PM_MODE_CYCLE.length - 1);
+          pm.modeTimer = PM_MODE_CYCLE[pm.modeIndex];
+          pm.scatter = pm.modeIndex % 2 === 0;
+          pm.ghosts.forEach(g => { if (g.mode === 'active' && g.dir) g.dir = PM_OPP[g.dir]; });
+        }
+      }
+
+      const p = pm.pac;
+      p.moving = pmStep(p, p.speed * dt, pmPacCanEnter, pacChooseDir);
+      if (p.dir === 'left') p.facing = -1;
+      else if (p.dir === 'right') p.facing = 1;
+      pacmanEatAt(p.x, p.y);
+      if (pm.state !== 'playing') return;
+
+      for (const g of pm.ghosts) {
+        updatePacmanGhost(g, dt);
+        if (!['active', 'leaving'].includes(g.mode)) continue;
+        let dx = Math.abs(g.x - p.x);
+        dx = Math.min(dx, PM_COLS - dx);
+        if (dx + Math.abs(g.y - p.y) > 0.7) continue;
+        if (g.frightened) {
+          const pts = 200 * 2 ** pm.ghostCombo++;
+          pm.score += pts;
+          pm.popups.push({ x: g.x, y: g.y, text: `+${pts}`, t: 1 });
+          pm.popups.push({ x: g.x, y: g.y + 0.9, text: `💰+${MIKMAK_PRICE}`, t: 1.3 });
+          pm.coinsEarned += MIKMAK_PRICE;
+          addCoins(MIKMAK_PRICE);
+          g.mode = 'eaten';
+          g.frightened = false;
+          updatePacmanHud();
+        } else {
+          setPacmanState('dying', 1.5);
+          return;
+        }
+      }
+    }
+
+    function finishPacmanGame() {
+      if (pm.score > pm.high) {
+        pm.high = pm.score;
+        localStorage.setItem(`sh_pacman_high_${currentUser}`, pm.high);
+        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 }, zIndex: 900 });
+      }
+      updatePacmanHud();
+      setPacmanState('gameover');
+    }
+
+    // ---------- ציור ----------
+    function drawPacmanGhost(ctx, g) {
+      const T = pm.T, r = T * 0.72;
+      const bob = g.mode === 'house' ? Math.sin(pm.time * 6 + g.x) * T * 0.18 : 0;
+      const x = (g.x + 0.5) * T, y = (g.y + 0.5) * T + bob;
+      const flashing = g.frightened && pm.frightTimer < 2 && Math.floor(pm.time * 6) % 2 === 0;
+
+      if (g.mode !== 'eaten' && g.mode !== 'entering') {
+        ctx.save();
+        ctx.fillStyle = g.frightened ? (flashing ? '#f8fafc' : '#2563eb') : g.color;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = T * 0.4;
+        ctx.beginPath();
+        ctx.arc(x, y - r * 0.15, r, Math.PI, 0);
+        const bottom = y + r * 0.85, waves = 3, w = (r * 2) / waves;
+        const phase = Math.floor(pm.time * 8) % 2 ? w / 2 : 0;
+        ctx.lineTo(x + r, bottom);
+        for (let i = 0; i < waves; i++) {
+          const sx = x + r - i * w;
+          ctx.quadraticCurveTo(sx - w / 4 - phase / 3, bottom - r * 0.28, sx - w / 2, bottom);
+          ctx.quadraticCurveTo(sx - (3 * w) / 4 + phase / 3, bottom + r * 0.05, sx - w, bottom);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      if (g.frightened && g.mode !== 'eaten') {
+        // פרצוף מבוהל
+        ctx.fillStyle = flashing ? '#ef4444' : '#fde68a';
+        ctx.fillRect(x - r * 0.38, y - r * 0.32, r * 0.18, r * 0.18);
+        ctx.fillRect(x + r * 0.2, y - r * 0.32, r * 0.18, r * 0.18);
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = T * 0.07;
+        ctx.beginPath();
+        for (let i = 0; i <= 4; i++) {
+          const px = x - r * 0.5 + (i * r) / 4, py = y + r * 0.3 + (i % 2 ? -r * 0.12 : 0);
+          i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        }
+        ctx.stroke();
+        return;
+      }
+
+      const d = PM_DIRS[g.dir] || { x: 0, y: 0 };
+      for (const side of [-1, 1]) {
+        const ex = x + side * r * 0.38, ey = y - r * 0.28;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.ellipse(ex, ey, r * 0.27, r * 0.34, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1e3a8a';
+        ctx.beginPath();
+        ctx.arc(ex + d.x * r * 0.12, ey + d.y * r * 0.15, r * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ---------- מיקום הסרטון בתוך העיגול (זום / הזזה / היפוך) ----------
+    const PM_CROP_DEFAULT = { zoom: 1, x: 0, y: 0, mirror: false };
+    let pmCrop = { ...PM_CROP_DEFAULT, ...JSON.parse(localStorage.getItem('sh_pacman_crop') || '{}') };
+    const pmEditor = { open: false, canvas: null, ctx: null, size: 220, drag: null };
+
+    function pacmanMediaSize() {
+      if (pm.mediaKind === 'video') return { src: pm.video, w: pm.video.videoWidth, h: pm.video.videoHeight };
+      return { src: pm.image, w: pm.image.naturalWidth, h: pm.image.naturalHeight };
+    }
+
+    // מצייר את הפנים בעיגול סביב (0,0). מחזיר false אם אין מדיה מוכנה
+    function drawPacmanFace(ctx, radius, facing, ring) {
+      const { src, w, h } = pacmanMediaSize();
+      if (!pm.mediaOk || !w || !h) return false;
+      const base = Math.min(w, h);
+      const s = base / pmCrop.zoom;
+      const cx = w / 2 + pmCrop.x * base, cy = h / 2 + pmCrop.y * base;
+      ctx.save();
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.clip();
+      ctx.scale(facing * (pmCrop.mirror ? -1 : 1), 1);
+      ctx.drawImage(src, cx - s / 2, cy - s / 2, s, s, -radius, -radius, radius * 2, radius * 2);
+      ctx.restore();
+      ctx.save();
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = ring;
+      ctx.shadowColor = '#facc15';
+      ctx.shadowBlur = ring * 5;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      return true;
+    }
+
+    function setPacmanCrop(key, value) {
+      pmCrop[key] = key === 'mirror' ? !!value : parseFloat(value);
+      pmCrop.zoom = Math.min(4, Math.max(0.6, pmCrop.zoom));
+      pmCrop.x = Math.min(0.6, Math.max(-0.6, pmCrop.x));
+      pmCrop.y = Math.min(0.6, Math.max(-0.6, pmCrop.y));
+      localStorage.setItem('sh_pacman_crop', JSON.stringify(pmCrop));
+      syncPacmanCropInputs();
+    }
+
+    function resetPacmanCrop() {
+      pmCrop = { ...PM_CROP_DEFAULT };
+      localStorage.setItem('sh_pacman_crop', JSON.stringify(pmCrop));
+      syncPacmanCropInputs();
+    }
+
+    function syncPacmanCropInputs() {
+      document.getElementById('pm-crop-zoom').value = pmCrop.zoom;
+      document.getElementById('pm-crop-x').value = -pmCrop.x * (pmCrop.mirror ? -1 : 1); // המחוון מזיז את הפנים, לא את חלון החיתוך
+      document.getElementById('pm-crop-y').value = -pmCrop.y;
+      document.getElementById('pm-crop-mirror').checked = pmCrop.mirror;
+      document.getElementById('pm-crop-zoom-val').innerText = `×${pmCrop.zoom.toFixed(2)}`;
+    }
+
+    function togglePacmanEditor(force) {
+      pmEditor.open = typeof force === 'boolean' ? force : !pmEditor.open;
+      document.getElementById('pm-editor').classList.toggle('hidden', !pmEditor.open);
+      if (!pmEditor.open) return;
+      pausePacman();
+      setupPacmanEditor();
+      syncPacmanCropInputs();
+      document.getElementById('pm-editor').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function setupPacmanEditor() {
+      if (pmEditor.canvas) return;
+      const c = document.getElementById('pm-editor-canvas');
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      c.style.width = c.style.height = pmEditor.size + 'px';
+      c.width = c.height = Math.round(pmEditor.size * dpr);
+      pmEditor.canvas = c;
+      pmEditor.ctx = c.getContext('2d');
+      pmEditor.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pmEditor.ctx.imageSmoothingQuality = 'high';
+
+      // גרירה = הזזת הפנים. כמה יחידות מקור יש בכל פיקסל של התצוגה
+      const unitsPerPx = () => 1 / (pmCrop.zoom * (pmEditor.size - 20));
+      c.addEventListener('pointerdown', (e) => {
+        c.setPointerCapture(e.pointerId);
+        pmEditor.drag = { x: e.clientX, y: e.clientY };
+      });
+      c.addEventListener('pointermove', (e) => {
+        if (!pmEditor.drag) return;
+        const dx = e.clientX - pmEditor.drag.x, dy = e.clientY - pmEditor.drag.y;
+        pmEditor.drag = { x: e.clientX, y: e.clientY };
+        const m = pmCrop.mirror ? -1 : 1;
+        pmCrop.x -= dx * m * unitsPerPx();
+        pmCrop.y -= dy * unitsPerPx();
+        setPacmanCrop('zoom', pmCrop.zoom);
+      });
+      const endDrag = () => { pmEditor.drag = null; };
+      c.addEventListener('pointerup', endDrag);
+      c.addEventListener('pointercancel', endDrag);
+      c.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        setPacmanCrop('zoom', pmCrop.zoom * (e.deltaY < 0 ? 1.06 : 1 / 1.06));
+      }, { passive: false });
+    }
+
+    function drawPacmanEditor() {
+      const ctx = pmEditor.ctx, S = pmEditor.size;
+      ctx.clearRect(0, 0, S, S);
+      ctx.save();
+      ctx.translate(S / 2, S / 2);
+      if (!drawPacmanFace(ctx, S / 2 - 10, 1, 5)) {
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '700 14px Assistant, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('הסרטון נטען...', 0, 0);
+      }
+      ctx.restore();
+      // קווי עזר עדינים למרכז
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(S / 2, 14); ctx.lineTo(S / 2, S - 14);
+      ctx.moveTo(14, S / 2); ctx.lineTo(S - 14, S / 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function drawPacmanPlayer(ctx) {
+      const T = pm.T, p = pm.pac;
+      const x = (p.x + 0.5) * T, y = (p.y + 0.5) * T;
+      let radius = T * 0.8, spin = 0;
+      if (pm.state === 'dying') {
+        const k = Math.max(pm.stateTimer / 1.5, 0);
+        radius *= k;
+        spin = (1 - k) * Math.PI * 4;
+      }
+      if (radius < 0.5) return;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(spin);
+      if (drawPacmanFace(ctx, radius, p.facing, Math.max(2, T * 0.12))) {
+        // הפנים צוירו
+      } else {
+        // גיבוי: פאק-מן קלאסי אם הסרטון לא נטען
+        const angle = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 }[p.dir] || 0;
+        const mouth = p.moving ? Math.abs(Math.sin(pm.time * 14)) * 0.7 : 0.35;
+        ctx.rotate(angle);
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, radius * 0.85, mouth / 2, Math.PI * 2 - mouth / 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPacman() {
+      if (!pm.ready || !pm.mazeLayer) return;
+      const ctx = pm.ctx, T = pm.T, w = PM_COLS * T, h = PM_ROWS * T;
+      ctx.fillStyle = '#0b0f2a';
+      ctx.fillRect(0, 0, w, h);
+
+      const blink = pm.state === 'levelclear' && Math.floor(pm.time * 5) % 2 === 0;
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (blink) ctx.globalAlpha = 0.25;
+      ctx.drawImage(pm.mazeLayer, 0, 0);
+      ctx.restore();
+
+      // נקודות וגלולות כוח
+      const pulse = 0.75 + Math.sin(pm.time * 8) * 0.25;
+      for (let r = 0; r < PM_ROWS; r++) {
+        for (let c = 0; c < PM_COLS; c++) {
+          const v = pm.dots[r] && pm.dots[r][c];
+          if (!v) continue;
+          ctx.fillStyle = v === 1 ? '#fde68a' : '#fbbf24';
+          ctx.beginPath();
+          ctx.arc((c + 0.5) * T, (r + 0.5) * T, v === 1 ? T * 0.11 : T * 0.3 * pulse, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      if (pm.state !== 'levelclear') pm.ghosts.forEach(g => drawPacmanGhost(ctx, g));
+      drawPacmanPlayer(ctx);
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      pm.popups.forEach(p => {
+        ctx.fillStyle = `rgba(255,255,255,${Math.min(p.t * 2, 1)})`;
+        ctx.font = `800 ${T * 0.7}px Assistant, sans-serif`;
+        ctx.fillText(p.text, (p.x + 0.5) * T, (p.y + 0.5) * T - (1 - p.t) * T);
+      });
+
+      const banner = pm.state === 'ready' ? 'מוכנים? בולסים! 😋'
+        : pm.state === 'levelclear' ? 'הלל בלס את כל המבוך! 🍽️' : '';
+      if (banner) {
+        ctx.font = `800 ${T * 0.85}px Assistant, sans-serif`;
+        ctx.fillStyle = '#facc15';
+        ctx.shadowColor = '#000';
+        ctx.shadowBlur = 6;
+        ctx.direction = 'rtl';
+        ctx.fillText(banner, w / 2, 11.5 * T);
+        ctx.direction = 'ltr';
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    function pacmanLoop(now) {
+      const dt = Math.min((now - (pm.lastTime || now)) / 1000, 0.05);
+      pm.lastTime = now;
+      if (!document.getElementById('section-pacman').classList.contains('hidden')) {
+        updatePacman(dt);
+        // הסרטון זז רק כשהלל זז — ככה הפה נפתח ונסגר בזמן הבליסה
+        const chomping = (pm.state === 'playing' && pm.pac.moving) || pmEditor.open;
+        if (pmEditor.open) drawPacmanEditor();
+        if (pm.mediaKind === 'video' && pm.mediaOk) {
+          if (chomping && pm.video.paused) pm.video.play().catch(() => {});
+          else if (!chomping && !pm.video.paused) pm.video.pause();
+        }
+        drawPacman();
+      } else if (!pm.video.paused) {
+        pm.video.pause();
+      }
+      requestAnimationFrame(pacmanLoop);
+    }
+  </script>
+</body>
+</html>
