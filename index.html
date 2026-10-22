@@ -749,6 +749,7 @@
           return;
         }
         refreshFromStorage();
+        subscribeCloudMikmak();
         enterSite();
       });
     }
@@ -934,6 +935,7 @@
       document.getElementById(`section-${tab}`).classList.remove('hidden');
       if (tab === 'pacman') resizePacman();
       if (tab === 'avatar' && mk.ready) renderMikmakStage();
+      if (tab === 'gallery') ensureGallerySync();
       const active = document.getElementById(`tab-btn-${tab}`);
       active.classList.remove('text-gray-400');
       active.classList.add(tab === 'scoreboard' ? 'text-blue-600' : 'text-rose-500', 'border-b-2', tab === 'scoreboard' ? 'border-blue-600' : 'border-rose-500');
@@ -1678,6 +1680,7 @@
         mk.items.forEach(it => { it.thumb = mikmakThumb(it); });
         mk.ready = true;
         renderMikmakUI();
+        if (cloud.db) syncCloudMikmakItems();
       })().catch(err => {
         console.error(err);
         document.getElementById('mikmak-hint').innerText = 'לא הצלחתי לטעון את תמונות המיקמק 😕';
@@ -1714,9 +1717,24 @@
 
       let cv = toCanvas(await loadImageEl(await blobToDataURL(file)), null, 900);
       if (removeBg) cv = autoCrop(cutAutoBackground(cv));
-      const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+      const frame = !removeBg && cat === 'print';
 
-      const record = { id: `custom-${Date.now()}`, cat, name, blob, frame: !removeBg && cat === 'print' };
+      // באתר עצמו הפריט נשמר בענן, ואז הוא מופיע בחנות אצל שניכם
+      if (cloud.db) {
+        const data = await fitImageForCloud(cv, 900, 'image/png');
+        if (!data) return alert('התמונה גדולה מדי 😕');
+        try {
+          await saveCloudImage(`cloud-${Date.now()}`, { kind: 'mikmak', cat, name, frame, data });
+        } catch (err) {
+          return cloudImageError(err);
+        }
+        nameEl.value = '';
+        mk.cat = cat;
+        return syncCloudMikmakItems();
+      }
+
+      const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+      const record = { id: `custom-${Date.now()}`, cat, name, blob, frame };
       const list = (await getMediaFromDB('mikmak_items')) || [];
       list.push(record);
       await saveMediaToDB(list, 'mikmak_items');
@@ -1733,7 +1751,10 @@
     async function deleteMikmakItem(id) {
       const item = mk.items.find(it => it.id === id);
       if (!item || !confirm(`להוריד את "${item.name}" מהחנות?`)) return;
-      if (item.custom) {
+      if (item.cloud) {
+        cloud.db.collection('media').doc(id).delete().catch(cloudImageError);
+        mk.items = mk.items.filter(it => it.id !== id);
+      } else if (item.custom) {
         const list = ((await getMediaFromDB('mikmak_items')) || []).filter(it => it.id !== id);
         await saveMediaToDB(list, 'mikmak_items');
         mk.items = mk.items.filter(it => it.id !== id);
@@ -2166,13 +2187,113 @@
       }
     }
 
+    // ================= תמונות בענן (גלריה ופריטי מיקמק) =================
+    // תמונה נשמרת כמסמך במסד הנתונים, ומסמך מוגבל ל-1MB, אז מקטינים עד שהיא נכנסת
+    const CLOUD_IMAGE_MAX_CHARS = 950000;
+    cloud.gallery = [];
+    cloud.mikmak = [];
+    cloud.galleryListening = false;
+
+    async function fitImageForCloud(src, maxSide, type, quality) {
+      const w0 = src.naturalWidth || src.width, h0 = src.naturalHeight || src.height;
+      for (let side = Math.min(maxSide, Math.max(w0, h0)); side >= 200; side = Math.round(side * 0.8)) {
+        const k = side / Math.max(w0, h0);
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(w0 * k));
+        cv.height = Math.max(1, Math.round(h0 * k));
+        cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
+        const url = cv.toDataURL(type, quality);
+        if (url.length <= CLOUD_IMAGE_MAX_CHARS) return url;
+      }
+      return null;
+    }
+
+    function saveCloudImage(id, fields) {
+      return cloud.db.collection('media').doc(id).set({
+        ...fields, by: currentUser, t: Date.now(), at: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    function cloudImageError(err) {
+      console.error('cloud image failed', err);
+      alert(err && err.code === 'permission-denied'
+        ? 'אין הרשאה לשמור תמונות בענן. צריך לעדכן את חוקי האבטחה ב-Firebase (לשונית Rules)'
+        : 'לא הצלחתי לשמור את התמונה בענן 😕');
+    }
+
+    // פריטי מיקמק נטענים מיד, כי הם קטנים
+    function subscribeCloudMikmak() {
+      cloud.db.collection('media').where('kind', '==', 'mikmak').onSnapshot(snap => {
+        cloud.mikmak = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        syncCloudMikmakItems();
+      }, err => console.error('mikmak listener failed', err));
+    }
+
+    // תמונות הגלריה כבדות יותר, אז מורידים אותן רק כשנכנסים ללשונית הגלריה
+    function ensureGallerySync() {
+      if (!cloud.db || cloud.galleryListening) return;
+      cloud.galleryListening = true;
+      cloud.db.collection('media').where('kind', '==', 'gallery').onSnapshot(snap => {
+        cloud.gallery = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        loadGalleryFromDB();
+      }, err => console.error('gallery listener failed', err));
+    }
+
+    // מסנכרן את רשימת הפריטים בחנות עם מה שיש בענן (פעולה אחת בכל פעם)
+    let mkCloudSync = Promise.resolve();
+    function syncCloudMikmakItems() {
+      mkCloudSync = mkCloudSync.then(async () => {
+        if (!mk.ready) return; // initMikmak יקרא לזה בעצמו כשהארון יהיה מוכן
+        const ids = new Set(cloud.mikmak.map(m => m.id));
+        mk.items = mk.items.filter(it => !it.cloud || ids.has(it.id));
+        for (const m of cloud.mikmak) {
+          if (mk.items.some(it => it.id === m.id)) continue;
+          try {
+            const canvas = toCanvas(await loadImageEl(m.data));
+            const item = analyzeMikmakItem({ id: m.id, cat: m.cat, name: m.name, kind: 'image', frame: m.frame, custom: true, cloud: true, canvas });
+            item.thumb = mikmakThumb(item);
+            mk.items.push(item);
+          } catch (err) { console.error('bad cloud item', m.id, err); }
+        }
+        Object.keys(mk.state.equipped).forEach(k => {
+          const id = mk.state.equipped[k];
+          if (id && id.startsWith('cloud-') && !ids.has(id)) mk.state.equipped[k] = null;
+        });
+        renderMikmakUI();
+        renderMikmakStage();
+      }).catch(err => console.error(err));
+      return mkCloudSync;
+    }
+
     // ================= גלריית תמונות נעות (Hover to Play) =================
     async function uploadGalleryMedia(e) {
       const files = Array.from(e.target.files);
+      e.target.value = '';
       if (!files.length) return;
       const db = await openDB();
+      let localOnly = 0;
 
       for (const file of files) {
+        // באתר עצמו תמונות עולות לענן. GIF נשאר כמו שהוא כדי שימשיך לזוז
+        if (cloud.db && file.type.startsWith('image/')) {
+          try {
+            let data = null;
+            if (file.type === 'image/gif') {
+              const raw = await blobToDataURL(file);
+              if (raw.length <= CLOUD_IMAGE_MAX_CHARS) data = raw;
+            }
+            if (!data) data = await fitImageForCloud(await loadImageEl(await blobToDataURL(file)), 1280, 'image/jpeg', 0.82);
+            if (data) {
+              await saveCloudImage(`cloud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, {
+                kind: 'gallery', type: data.slice(5, data.indexOf(';')), data, date: new Date().toLocaleDateString('he-IL')
+              });
+              continue;
+            }
+          } catch (err) {
+            cloudImageError(err);
+            continue;
+          }
+        }
         const item = {
           id: Date.now() + Math.random(),
           type: file.type,
@@ -2182,7 +2303,9 @@
         const tx = db.transaction('gallery', 'readwrite');
         tx.objectStore('gallery').put(item);
         await new Promise(res => tx.oncomplete = res);
+        localOnly++;
       }
+      if (cloud.db && localOnly) alert('סרטונים נשמרים רק במכשיר הזה (הם גדולים מדי לענן) 📱');
       loadGalleryFromDB();
     }
 
@@ -2191,7 +2314,9 @@
       const tx = db.transaction('gallery', 'readonly');
       const req = tx.objectStore('gallery').getAll();
       req.onsuccess = () => {
-        renderGallery(req.result || []);
+        const local = (req.result || []).map(it => ({ ...it, t: it.id }));
+        const fromCloud = cloud.gallery.map(m => ({ id: m.id, type: m.type, url: m.data, t: m.t || 0, cloud: true }));
+        renderGallery([...local, ...fromCloud].sort((a, b) => b.t - a.t));
       };
     }
 
@@ -2202,9 +2327,13 @@
         return;
       }
 
-      grid.innerHTML = items.reverse().map(item => {
-        const url = URL.createObjectURL(item.file);
+      grid.innerHTML = items.map(item => {
+        const url = item.url || URL.createObjectURL(item.file);
         const isVideo = item.type.startsWith('video/');
+        const del = `deleteGalleryItem('${item.id}', ${!!item.cloud})`;
+        const localTag = cloud.db && !item.cloud
+          ? `<span class="absolute top-2.5 right-2.5 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-bold backdrop-blur-xs select-none">📱 רק במכשיר הזה</span>`
+          : '';
 
         if (isVideo) {
           return `
@@ -2219,14 +2348,16 @@
                 <span class="text-rose-400">▶</span> LIVE
               </span>
 
-              <button onclick="event.stopPropagation(); deleteGalleryItem(${item.id})" class="absolute top-2.5 left-2.5 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs">✕</button>
+              ${localTag}
+              <button onclick="event.stopPropagation(); ${del}" class="absolute top-2.5 left-2.5 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs">✕</button>
             </div>
           `;
         } else {
           return `
             <div class="relative group aspect-square rounded-3xl overflow-hidden shadow-xs border border-gray-100 bg-gray-50">
               <img src="${url}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
-              <button onclick="deleteGalleryItem(${item.id})" class="absolute top-2.5 left-2.5 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs">✕</button>
+              ${localTag}
+              <button onclick="${del}" class="absolute top-2.5 left-2.5 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs">✕</button>
             </div>
           `;
         }
@@ -2255,10 +2386,15 @@
       }
     }
 
-    async function deleteGalleryItem(id) {
+    async function deleteGalleryItem(id, isCloud) {
+      if (isCloud) {
+        if (!confirm('למחוק את התמונה? היא תימחק גם אצל השני')) return;
+        cloud.db.collection('media').doc(id).delete().catch(cloudImageError);
+        return; // המאזין לענן ירענן את הגלריה
+      }
       const db = await openDB();
       const tx = db.transaction('gallery', 'readwrite');
-      tx.objectStore('gallery').delete(id);
+      tx.objectStore('gallery').delete(Number(id));
       tx.oncomplete = () => loadGalleryFromDB();
     }
 
