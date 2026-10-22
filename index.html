@@ -8,6 +8,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <script src="media/mikmak/assets.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <style>
     body {
@@ -77,19 +80,25 @@
         <p class="text-xs text-gray-400">הכניסה למורשים בלבד ✨</p>
       </div>
 
-      <div class="space-y-4 text-right">
-        <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">שם משתמש</label>
-          <input id="username" type="text" placeholder="שירה / הלל" class="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-rose-300 outline-none transition">
-        </div>
-        <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">סיסמה</label>
-          <input id="password" type="password" placeholder="••••••••" class="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-rose-300 outline-none transition">
-        </div>
-        <p id="login-error" class="text-rose-500 text-xs hidden">שם משתמש או סיסמה שגויים, נסו שוב :)</p>
-        <button onclick="handleLogin()" class="w-full py-3.5 bg-gray-900 hover:bg-black text-white font-bold rounded-2xl shadow-md transition">
-          כניסה לאתר
+      <div class="space-y-4">
+        <p id="login-status" class="text-xs text-gray-500">מתחבר... ⏳</p>
+
+        <!-- באתר עצמו: כניסה עם חשבון Google, רק לשנינו -->
+        <button id="google-login-btn" onclick="signInWithGoogle()" class="hidden w-full py-3.5 bg-gray-900 hover:bg-black text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-3">
+          <span class="bg-white text-gray-900 rounded-full w-6 h-6 flex items-center justify-center font-black text-sm">G</span>
+          כניסה עם Google
         </button>
+
+        <!-- כשפותחים את הקובץ מהמחשב אין ענן: בוחרים מי נכנס, והמידע נשמר רק במחשב -->
+        <div id="local-login" class="hidden space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <button onclick="enterLocal('הלל')" class="py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-md transition">🔵 הלל</button>
+            <button onclick="enterLocal('שירה')" class="py-3.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-2xl shadow-md transition">🌸 שירה</button>
+          </div>
+          <p class="text-[11px] text-gray-400">מצב מקומי: המידע נשמר רק במחשב הזה ולא מסונכרן</p>
+        </div>
+
+        <p id="login-error" class="text-rose-500 text-xs hidden"></p>
 
         <div class="pt-2 text-center">
           <label class="text-xs text-gray-400 hover:text-gray-700 cursor-pointer underline">
@@ -151,7 +160,7 @@
            alt="שער" class="absolute inset-0 w-full h-full object-cover opacity-90 transition duration-700">
       <div class="absolute inset-0 bg-gradient-to-t from-white via-white/20 to-black/30"></div>
 
-      <div class="absolute top-6 left-6 z-20 flex gap-2">
+      <div class="absolute top-6 left-6 right-6 z-20 flex flex-wrap justify-end gap-2">
         <label class="cursor-pointer bg-white/90 hover:bg-white text-gray-700 px-4 py-2 rounded-full text-xs font-bold backdrop-blur shadow-sm transition">
           🎬 החלפת סרטון טעינה
           <input type="file" accept="video/*,image/*" class="hidden" onchange="handleMediaUpload(event)">
@@ -159,6 +168,13 @@
         <label class="cursor-pointer bg-white/90 hover:bg-white text-gray-700 px-4 py-2 rounded-full text-xs font-bold backdrop-blur shadow-sm transition">
           📷 החלפת שער
           <input type="file" accept="image/*" class="hidden" onchange="changeCoverPhoto(event)">
+        </label>
+        <button onclick="exportBackup()" class="bg-white/90 hover:bg-white text-gray-700 px-4 py-2 rounded-full text-xs font-bold backdrop-blur shadow-sm transition">
+          💾 גיבוי
+        </button>
+        <label class="cursor-pointer bg-white/90 hover:bg-white text-gray-700 px-4 py-2 rounded-full text-xs font-bold backdrop-blur shadow-sm transition">
+          📥 שחזור
+          <input type="file" accept=".json,application/json" class="hidden" onchange="importBackup(event)">
         </label>
         <button onclick="logout()" class="bg-white/90 hover:bg-white text-rose-500 px-4 py-2 rounded-full text-xs font-bold backdrop-blur shadow-sm transition">
           יציאה
@@ -542,13 +558,273 @@
   </div>
 
   <script>
-    const users = {
-      "שירה": "בשמחהובטובלבב",
-      "הלל": "משפטארוךשלהרבקוק"
-    };
-
     let currentUser = localStorage.getItem('sh_user') || 'שירה';
     let matchAutoCloseTimer = null;
+
+    // ================= ענן: התחברות עם Google וסנכרון ב-Firebase =================
+    // ההגדרות האלה ציבוריות מטבען. מה שמגן על המידע הם חוקי האבטחה ב-Firestore (firestore.rules)
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyAMmIowu927eowX-PMvAbhurUZ5g_kjb-U",
+      authDomain: "shira-hillel.firebaseapp.com",
+      projectId: "shira-hillel",
+      storageBucket: "shira-hillel.firebasestorage.app",
+      messagingSenderId: "658666868762",
+      appId: "1:658666868762:web:9419d81c2a185d2c9041a3"
+    };
+    const ALLOWED_USERS = {
+      'hillelad2003@gmail.com': 'הלל',
+      'shirafin2005@gmail.com': 'שירה'
+    };
+    const LOCAL_ONLY_KEYS = ['sh_user', 'sh_topics_cat']; // הגדרות של המכשיר הזה בלבד
+
+    // בפתיחה ישירה של הקובץ מהמחשב אי אפשר להתחבר ל-Google, אז עובדים במצב מקומי
+    const cloud = { enabled: location.protocol.startsWith('http') && !!window.firebase, auth: null, db: null, timers: {} };
+    let siteStarted = false;
+    let pendingRefresh = false;
+
+    // כל שמירה באתר עוברת דרך כאן: נשמר בדפדפן, ובאתר עצמו גם נשלח לענן
+    function storeSet(key, value) {
+      value = String(value);
+      if (localStorage.getItem(key) === value) return;
+      localStorage.setItem(key, value);
+      queueCloudPush(key);
+    }
+
+    function storeRemove(key) {
+      if (localStorage.getItem(key) === null) return;
+      localStorage.removeItem(key);
+      queueCloudPush(key);
+    }
+
+    // מחכים רגע לפני השליחה, כדי שהקלדה של הערה לא תשלח כל אות בנפרד
+    function queueCloudPush(key) {
+      if (!cloud.db || LOCAL_ONLY_KEYS.includes(key)) return;
+      clearTimeout(cloud.timers[key]);
+      cloud.timers[key] = setTimeout(() => pushCloudKey(key), 500);
+    }
+
+    function pushCloudKey(key) {
+      delete cloud.timers[key];
+      const ref = cloud.db.collection('kv').doc(key);
+      const v = localStorage.getItem(key);
+      const op = v === null ? ref.delete() : ref.set({ v, by: currentUser, at: firebase.firestore.FieldValue.serverTimestamp() });
+      op.catch(err => {
+        console.error('cloud save failed', key, err);
+        showSyncNotice(err.code === 'invalid-argument' ? 'הקובץ גדול מדי לשמירה בענן 😕' : 'השמירה בענן נכשלה, בדקו את החיבור לאינטרנט');
+      });
+    }
+
+    function showSyncNotice(text) {
+      let el = document.getElementById('sync-notice');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'sync-notice';
+        el.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-gray-900 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl';
+        document.body.appendChild(el);
+      }
+      el.innerText = text;
+      el.classList.remove('hidden');
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.add('hidden'), 4000);
+    }
+
+    // מאזין לשינויים בענן. הקריאה הראשונה מביאה את כל המידע לפני שהאתר עולה
+    function subscribeCloud() {
+      return new Promise((resolve, reject) => {
+        let first = true;
+        cloud.db.collection('kv').onSnapshot(snap => {
+          let changed = false;
+          snap.docChanges().forEach(ch => {
+            const key = ch.doc.id;
+            if (ch.doc.metadata.hasPendingWrites || cloud.timers[key]) return; // שינוי שלנו שעוד לא נשלח
+            const v = ch.type === 'removed' ? null : ch.doc.data().v;
+            if (localStorage.getItem(key) === v) return;
+            if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v);
+            changed = true;
+          });
+          if (first) {
+            first = false;
+            // מידע שקיים רק במכשיר הזה ועוד לא בענן עולה לענן (העברה חד-פעמית)
+            const inCloud = new Set(snap.docs.map(d => d.id));
+            Object.keys(localStorage).filter(k => k.startsWith('sh_') && !inCloud.has(k)).forEach(queueCloudPush);
+            resolve();
+          } else if (changed && siteStarted) {
+            refreshFromStorage();
+          }
+        }, err => {
+          if (first) reject(err);
+          else console.error('cloud listener failed', err);
+        });
+      });
+    }
+
+    // טוען מחדש את כל המידע מהדפדפן ומצייר שוב, אחרי שהגיע עדכון מהצד השני
+    function refreshFromStorage() {
+      // לא מרעננים באמצע הקלדה, כדי לא להעיף את הסמן. מחכים שהשדה ייסגר
+      const a = document.activeElement;
+      if (a && ['INPUT', 'TEXTAREA'].includes(a.tagName) && a.type !== 'checkbox' && a.type !== 'file') {
+        pendingRefresh = true;
+        return;
+      }
+      pendingRefresh = false;
+      const read = (k, fallback) => {
+        try { return JSON.parse(localStorage.getItem(k)) ?? fallback; } catch { return fallback; }
+      };
+      scores = read('sh_scores_data', scores);
+      topics = read('sh_topics_v2', topics);
+      plans = read('sh_plans', plans);
+      candidates = read('sh_candidates', candidates);
+      matchedPairs = read('sh_matched', matchedPairs);
+      tasks = read('sh_tasks', tasks);
+      mk.hidden = read('sh_mikmak_hidden', []);
+      mk.fits = read('sh_mikmak_fit', {});
+      if (mk.state) mk.state = read(`sh_mikmak_${currentUser}`, mk.state);
+      pmCrop = { ...PM_CROP_DEFAULT, ...read('sh_pacman_crop', {}) };
+      if (pm.ready) {
+        pm.high = Math.max(pm.high, parseInt(localStorage.getItem(`sh_pacman_high_${currentUser}`) || '0'));
+        document.getElementById('pm-high').innerText = pm.high;
+      }
+      if (!siteStarted) return;
+      loadCover();
+      renderScoreboard();
+      renderTopics();
+      renderPlans();
+      renderCandidates();
+      renderMatchedList();
+      renderTasks();
+      if (mk.ready) { renderMikmakUI(); renderMikmakStage(); }
+    }
+    document.addEventListener('focusout', () => {
+      if (pendingRefresh) setTimeout(refreshFromStorage, 50);
+    });
+
+    // ---------- התחברות ----------
+    function setLoginStatus(text) {
+      document.getElementById('login-status').innerText = text;
+      document.getElementById('login-status').classList.toggle('hidden', !text);
+    }
+
+    function showLoginError(text) {
+      const err = document.getElementById('login-error');
+      err.innerText = text;
+      err.classList.toggle('hidden', !text);
+    }
+
+    function startAuth() {
+      if (!cloud.enabled) {
+        setLoginStatus('');
+        document.getElementById('local-login').classList.remove('hidden');
+        return;
+      }
+      firebase.initializeApp(FIREBASE_CONFIG);
+      cloud.auth = firebase.auth();
+      cloud.auth.onAuthStateChanged(async (user) => {
+        if (!user) {
+          setLoginStatus('');
+          document.getElementById('google-login-btn').classList.remove('hidden');
+          return;
+        }
+        const name = ALLOWED_USERS[(user.email || '').toLowerCase()];
+        if (!name) {
+          await cloud.auth.signOut();
+          showLoginError(`החשבון ${user.email} לא מורשה להיכנס לאתר הזה`);
+          return;
+        }
+        document.getElementById('google-login-btn').classList.add('hidden');
+        showLoginError('');
+        setLoginStatus(`שלום ${name}! טוען את המידע שלכם... ☁️`);
+        currentUser = name;
+        storeSet('sh_user', name);
+        cloud.db = firebase.firestore();
+        try {
+          await subscribeCloud();
+        } catch (err) {
+          console.error(err);
+          cloud.db = null;
+          setLoginStatus('');
+          showLoginError(err.code === 'permission-denied'
+            ? 'אין הרשאה למסד הנתונים. צריך להדביק את חוקי האבטחה ב-Firebase (לשונית Rules)'
+            : 'לא הצלחתי להתחבר לענן: ' + err.message);
+          document.getElementById('google-login-btn').classList.remove('hidden');
+          return;
+        }
+        refreshFromStorage();
+        enterSite();
+      });
+    }
+
+    async function signInWithGoogle() {
+      showLoginError('');
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      try {
+        await cloud.auth.signInWithPopup(provider);
+      } catch (err) {
+        if (err.code === 'auth/popup-blocked') return cloud.auth.signInWithRedirect(provider);
+        if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+          showLoginError('ההתחברות נכשלה: ' + err.message);
+        }
+      }
+    }
+
+    function enterLocal(name) {
+      currentUser = name;
+      storeSet('sh_user', name);
+      enterSite();
+    }
+
+    // מסך הטעינה מופיע רק בכניסה הראשונה בכל ביקור, לא בכל רענון
+    async function enterSite() {
+      document.getElementById('login-modal').classList.add('hidden');
+      const firstVisit = sessionStorage.getItem('sh_logged') !== 'true';
+      sessionStorage.setItem('sh_logged', 'true');
+      if (firstVisit) {
+        await loadLoadingMedia();
+        const loader = document.getElementById('loading-screen');
+        loader.classList.remove('hidden');
+        await new Promise(r => setTimeout(r, 1500));
+        loader.classList.add('hidden');
+      }
+      document.getElementById('site-content').classList.remove('hidden');
+      initSite();
+    }
+
+    async function logout() {
+      sessionStorage.removeItem('sh_logged');
+      if (cloud.auth) await cloud.auth.signOut();
+      location.reload();
+    }
+
+    // ---------- גיבוי ושחזור (גם כדי להעביר מידע מהקובץ במחשב לאתר) ----------
+    function exportBackup() {
+      const data = {};
+      Object.keys(localStorage).filter(k => k.startsWith('sh_') && !LOCAL_ONLY_KEYS.includes(k))
+        .forEach(k => { data[k] = localStorage.getItem(k); });
+      const blob = new Blob([JSON.stringify({ app: 'shira-hallel', at: new Date().toISOString(), data }, null, 1)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `גיבוי-שירה-והלל-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    function importBackup(e) {
+      const f = e.target.files[0];
+      e.target.value = '';
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        let backup;
+        try { backup = JSON.parse(r.result); } catch { return alert('הקובץ הזה לא נראה כמו גיבוי של האתר 🤔'); }
+        if (!backup || backup.app !== 'shira-hallel' || !backup.data) return alert('הקובץ הזה לא נראה כמו גיבוי של האתר 🤔');
+        const keys = Object.keys(backup.data).filter(k => k.startsWith('sh_') && !LOCAL_ONLY_KEYS.includes(k));
+        if (!confirm(`לשחזר ${keys.length} פריטי מידע מהגיבוי? המידע הנוכחי יוחלף${cloud.db ? ', גם בענן אצל שניכם' : ''}.`)) return;
+        keys.forEach(k => storeSet(k, backup.data[k]));
+        refreshFromStorage();
+        confetti({ particleCount: 60, spread: 60, zIndex: 900 });
+      };
+      r.readAsText(f);
+    }
 
     // ================= IndexedDB לשמירת סרטוני טעינה וגלריה ללא מגבלת מקום =================
     function openDB() {
@@ -624,46 +900,10 @@
       }
     }
 
-    // ================= התחברות =================
-    async function handleLogin() {
-      const u = document.getElementById('username').value.trim();
-      const p = document.getElementById('password').value.replace(/\s+/g, '');
-      const err = document.getElementById('login-error');
-
-      if (users[u] && users[u] === p) {
-        currentUser = u;
-        localStorage.setItem('sh_user', u);
-        sessionStorage.setItem('sh_logged', 'true');
-        document.getElementById('login-modal').classList.add('hidden');
-
-        await loadLoadingMedia();
-
-        const loader = document.getElementById('loading-screen');
-        loader.classList.remove('hidden');
-
-        setTimeout(() => {
-          loader.classList.add('hidden');
-          document.getElementById('site-content').classList.remove('hidden');
-          initSite();
-        }, 1500);
-
-      } else {
-        err.classList.remove('hidden');
-      }
-    }
-
-    function logout() {
-      sessionStorage.removeItem('sh_logged');
-      location.reload();
-    }
-
-    if (sessionStorage.getItem('sh_logged') === 'true') {
-      document.getElementById('login-modal').classList.add('hidden');
-      document.getElementById('site-content').classList.remove('hidden');
-      window.onload = initSite;
-    }
+    window.addEventListener('load', startAuth);
 
     function initSite() {
+      siteStarted = true;
       document.getElementById('greeting-badge').innerText = `מחובר/ת כעת: ${currentUser} ✨`;
       document.getElementById('avatar-user-title').innerText = `דמות: ${currentUser}`;
       loadCover();
@@ -744,7 +984,7 @@
         }).join('');
       }
 
-      localStorage.setItem('sh_scores_data', JSON.stringify(scores));
+      storeSet('sh_scores_data', JSON.stringify(scores));
     }
 
     function changeScore(person, delta) {
@@ -792,9 +1032,17 @@
       const f = e.target.files[0];
       if (!f) return;
       const r = new FileReader();
-      r.onload = (ev) => {
-        document.getElementById('cover-photo').src = ev.target.result;
-        localStorage.setItem('sh_cover_img', ev.target.result);
+      r.onload = async (ev) => {
+        // מקטינים לפני השמירה, כדי שהתמונה תיכנס לענן (עד כמה מאות KB)
+        const img = await loadImageEl(ev.target.result);
+        const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(img.naturalWidth * k);
+        cv.height = Math.round(img.naturalHeight * k);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        const url = cv.toDataURL('image/jpeg', 0.8);
+        document.getElementById('cover-photo').src = url;
+        storeSet('sh_cover_img', url);
       };
       r.readAsDataURL(f);
     }
@@ -816,7 +1064,7 @@
     }
 
     function switchTopicsCategory(cat) {
-      localStorage.setItem('sh_topics_cat', cat);
+      storeSet('sh_topics_cat', cat);
       ['talk', 'plans'].forEach(c => {
         document.getElementById(`topics-panel-${c}`).classList.toggle('hidden', c !== cat);
         const btn = document.getElementById(`topics-cat-${c}`);
@@ -870,12 +1118,12 @@
         (done.length ? `<div class="pt-3 text-[11px] font-bold text-gray-400">✓ דיברנו כבר (${done.length})</div>` + done.map(card).join('') : '');
 
       document.getElementById('talk-count').innerText = open.length ? `(${open.length})` : '';
-      localStorage.setItem('sh_topics_v2', JSON.stringify(topics));
+      storeSet('sh_topics_v2', JSON.stringify(topics));
     }
 
     function saveTopicNote(id, val) {
       const t = topics.find(item => item.id === id);
-      if (t) { t.note = val; localStorage.setItem('sh_topics_v2', JSON.stringify(topics)); }
+      if (t) { t.note = val; storeSet('sh_topics_v2', JSON.stringify(topics)); }
     }
     function toggleTopicDone(id) {
       const t = topics.find(item => item.id === id);
@@ -973,7 +1221,7 @@
 
       const pending = upcoming.length + ideas.length;
       document.getElementById('plans-count').innerText = pending ? `(${pending})` : '';
-      localStorage.setItem('sh_plans', JSON.stringify(plans));
+      storeSet('sh_plans', JSON.stringify(plans));
     }
 
     function addPlan() {
@@ -998,7 +1246,7 @@
       const p = plans.find(item => item.id === id);
       if (!p) return;
       p[field] = value;
-      localStorage.setItem('sh_plans', JSON.stringify(plans));
+      storeSet('sh_plans', JSON.stringify(plans));
       if (rerender) renderPlans();
     }
 
@@ -1034,7 +1282,7 @@
         badge.innerText = name;
         pool.appendChild(badge);
       });
-      localStorage.setItem('sh_candidates', JSON.stringify(candidates));
+      storeSet('sh_candidates', JSON.stringify(candidates));
     }
 
     function addCandidate() {
@@ -1087,7 +1335,7 @@
       candidates = candidates.filter(c => c !== p1 && c !== p2);
       matchedPairs.unshift({ p1, p2, date: new Date().toLocaleDateString('he-IL') });
 
-      localStorage.setItem('sh_matched', JSON.stringify(matchedPairs));
+      storeSet('sh_matched', JSON.stringify(matchedPairs));
       renderCandidates();
       renderMatchedList();
 
@@ -1118,7 +1366,7 @@
 
     function removeMatch(idx) {
       matchedPairs.splice(idx, 1);
-      localStorage.setItem('sh_matched', JSON.stringify(matchedPairs));
+      storeSet('sh_matched', JSON.stringify(matchedPairs));
       renderMatchedList();
     }
 
@@ -1129,7 +1377,7 @@
       return parseInt(localStorage.getItem('sh_coins') || '150'); // ירושה מהארנק המשותף הישן
     }
     function addCoins(n, user = currentUser) {
-      localStorage.setItem(`sh_coins_${user}`, Math.max(0, getCoins(user) + n));
+      storeSet(`sh_coins_${user}`, Math.max(0, getCoins(user) + n));
       if (typeof renderMikmakUI === 'function' && mk.ready) renderMikmakUI();
     }
 
@@ -1491,7 +1739,7 @@
         mk.items = mk.items.filter(it => it.id !== id);
       } else {
         mk.hidden.push(id);
-        localStorage.setItem('sh_mikmak_hidden', JSON.stringify(mk.hidden));
+        storeSet('sh_mikmak_hidden', JSON.stringify(mk.hidden));
       }
       Object.keys(mk.state.equipped).forEach(k => { if (mk.state.equipped[k] === id) mk.state.equipped[k] = null; });
       saveMikmakState();
@@ -1500,7 +1748,7 @@
 
     function restoreMikmakItems() {
       mk.hidden = [];
-      localStorage.removeItem('sh_mikmak_hidden');
+      storeRemove('sh_mikmak_hidden');
       renderMikmakUI();
     }
 
@@ -1510,7 +1758,7 @@
     }
 
     function saveMikmakState() {
-      localStorage.setItem(`sh_mikmak_${currentUser}`, JSON.stringify(mk.state));
+      storeSet(`sh_mikmak_${currentUser}`, JSON.stringify(mk.state));
     }
 
     // ---------- ציור פריטים וקטוריים ----------
@@ -1844,7 +2092,7 @@
           return;
         }
         if (!confirm(`לקנות "${it.name}" ב-${MIKMAK_PRICE} מטבעות?`)) return;
-        localStorage.setItem(`sh_coins_${currentUser}`, coins - MIKMAK_PRICE);
+        storeSet(`sh_coins_${currentUser}`, coins - MIKMAK_PRICE);
         mk.state.owned.push(it.id);
         eq[it.cat] = it.id;
         confetti({ particleCount: 70, spread: 70, zIndex: 900 });
@@ -1862,7 +2110,7 @@
       f.x = Math.min(0.6, Math.max(-0.6, f.x));
       f.y = Math.min(0.6, Math.max(-0.6, f.y));
       mk.fits[k] = f;
-      localStorage.setItem('sh_mikmak_fit', JSON.stringify(mk.fits));
+      storeSet('sh_mikmak_fit', JSON.stringify(mk.fits));
       if (rerender) {
         document.getElementById('fit-s').value = f.s;
         document.getElementById('fit-x').value = f.x;
@@ -1876,7 +2124,7 @@
       const item = mikmakFitTarget();
       if (!item) return;
       delete mk.fits[mikmakFitKey(item.id)];
-      localStorage.setItem('sh_mikmak_fit', JSON.stringify(mk.fits));
+      storeSet('sh_mikmak_fit', JSON.stringify(mk.fits));
       renderMikmakUI();
     }
 
@@ -1911,7 +2159,7 @@
       const t = tasks.find(item => item.id === id);
       if (t && !t.done) {
         t.done = true;
-        localStorage.setItem('sh_tasks', JSON.stringify(tasks));
+        storeSet('sh_tasks', JSON.stringify(tasks));
         addCoins(t.reward);
         confetti({ particleCount: 40, spread: 40, zIndex: 900 });
         renderTasks();
@@ -2549,7 +2797,7 @@
     function finishPacmanGame() {
       if (pm.score > pm.high) {
         pm.high = pm.score;
-        localStorage.setItem(`sh_pacman_high_${currentUser}`, pm.high);
+        storeSet(`sh_pacman_high_${currentUser}`, pm.high);
         confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 }, zIndex: 900 });
       }
       updatePacmanHud();
@@ -2656,13 +2904,13 @@
       pmCrop.zoom = Math.min(4, Math.max(0.6, pmCrop.zoom));
       pmCrop.x = Math.min(0.6, Math.max(-0.6, pmCrop.x));
       pmCrop.y = Math.min(0.6, Math.max(-0.6, pmCrop.y));
-      localStorage.setItem('sh_pacman_crop', JSON.stringify(pmCrop));
+      storeSet('sh_pacman_crop', JSON.stringify(pmCrop));
       syncPacmanCropInputs();
     }
 
     function resetPacmanCrop() {
       pmCrop = { ...PM_CROP_DEFAULT };
-      localStorage.setItem('sh_pacman_crop', JSON.stringify(pmCrop));
+      storeSet('sh_pacman_crop', JSON.stringify(pmCrop));
       syncPacmanCropInputs();
     }
 
