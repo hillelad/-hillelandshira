@@ -55,6 +55,16 @@
     canvas {
       pointer-events: none !important;
     }
+
+    /* לוח ה-Pac Man חייב לקבל מגע, אחרת ההחלקה גוללת את הדף במקום להזיז את הלל */
+    #pacman-canvas {
+      pointer-events: auto !important;
+    }
+
+    html.pm-lock, html.pm-lock body {
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
   </style>
 </head>
 <body class="selection:bg-rose-100">
@@ -322,8 +332,8 @@
         </div>
 
         <div class="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
-          <span class="block text-xs font-bold text-gray-400 mb-2">גררו שם מפה:</span>
-          <div id="candidates-pool" class="flex flex-wrap gap-2 min-h-[44px]"></div>
+          <span class="block text-xs font-bold text-gray-400 mb-3">גררו שם מפה, או פשוט לחצו עליו:</span>
+          <div id="candidates-pool" class="flex flex-wrap gap-3 min-h-[56px]"></div>
         </div>
 
         <div class="flex justify-center">
@@ -1019,7 +1029,8 @@
         const badge = document.createElement('span');
         badge.draggable = true;
         badge.ondragstart = (e) => e.dataTransfer.setData('text/plain', name);
-        badge.className = "cursor-grab active:cursor-grabbing bg-white border border-gray-200 text-gray-700 text-xs px-3.5 py-1.5 rounded-full shadow-xs hover:border-rose-300 font-semibold";
+        badge.onclick = () => addToSlot(name); // בטלפון גרירה לא תמיד עובדת, אז אפשר גם פשוט ללחוץ
+        badge.className = "cursor-grab active:cursor-grabbing select-none bg-white border-2 border-gray-200 text-gray-700 text-lg px-6 py-3 rounded-full shadow-sm hover:border-rose-300 active:scale-95 active:bg-rose-50 transition font-bold";
         badge.innerText = name;
         pool.appendChild(badge);
       });
@@ -1037,7 +1048,10 @@
 
     function handleDrop(e) {
       e.preventDefault();
-      const name = e.dataTransfer.getData('text/plain');
+      addToSlot(e.dataTransfer.getData('text/plain'));
+    }
+
+    function addToSlot(name) {
       if (!name || currentInSlot.includes(name)) return;
       currentInSlot.push(name);
       renderSlot();
@@ -1051,7 +1065,7 @@
 
     function renderSlot() {
       const slot = document.getElementById('slotted-pair');
-      slot.innerHTML = currentInSlot.map(n => `<span class="bg-white border border-rose-400 text-rose-600 px-3 py-1 rounded-xl font-bold text-xs shadow-xs">${n}</span>`).join('<span class="text-xs text-rose-400 font-bold">+</span>');
+      slot.innerHTML = currentInSlot.map(n => `<span class="bg-white border-2 border-rose-400 text-rose-600 px-5 py-2 rounded-2xl font-bold text-lg shadow-sm">${n}</span>`).join('<span class="text-lg text-rose-400 font-bold">+</span>');
     }
 
     function launchFullMatchAnimation(p1, p2) {
@@ -2211,6 +2225,8 @@
     function setPacmanState(state, timer = 0) {
       pm.state = state;
       pm.stateTimer = timer;
+      // בזמן משחק המסך נעול, כדי שהחלקה בטלפון לא תגלול את הדף
+      document.documentElement.classList.toggle('pm-lock', !['idle', 'paused', 'gameover'].includes(state));
       const overlay = document.getElementById('pm-overlay');
       const title = document.getElementById('pm-overlay-title');
       const sub = document.getElementById('pm-overlay-sub');
@@ -2299,6 +2315,9 @@
         touchStart = { x: t.clientX, y: t.clientY };
       }, { passive: false });
       pm.canvas.addEventListener('touchend', () => { touchStart = null; });
+      document.addEventListener('touchmove', (e) => {
+        if (document.documentElement.classList.contains('pm-lock')) e.preventDefault();
+      }, { passive: false });
 
       document.querySelectorAll('.pm-pad').forEach(btn => {
         btn.addEventListener('pointerdown', (e) => {
